@@ -16,7 +16,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.bobbyleu1.vroommobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Vroom needs access to your camera to allow you to record and upload videos.",
+        "NSPhotoLibraryUsageDescription": "Vroom needs access to your media library to upload saved videos or images.",
+        // **IMPORTANT**: Add microphone usage description for video recording
+        "NSMicrophoneUsageDescription": "Vroom needs access to your microphone to record audio for videos."
       }
     },
     "android": {
@@ -25,14 +29,31 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "permissions": []
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.bobbyleu1.vroommobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-video",
-      "react-native-video"
+      "expo-camera",
+      // **IMPORTANT**: Add expo-image-picker plugin with permission messages
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to upload media.",
+          "cameraPermission": "The app needs access to your camera to take photos and videos.",
+          "microphonePermission": "The app needs access to your microphone to record videos."
+        }
+      ],
+      // If you are using expo-video for playback, keep this.
+      // If you are only using expo-av for <Video> component, expo-video plugin might not be needed.
+      "expo-video"
     ],
     "extra": {
       "eas": {

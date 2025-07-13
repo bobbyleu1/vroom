@@ -1,37 +1,42 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependency directories
 node_modules/
+.yarn/cache/
 
-# Expo
+# Expo/React Native
 .expo/
-dist/
+.expo-shared/
 web-build/
-expo-env.d.ts
-
-# Native
-.kotlin/
-*.orig.*
+temp/
+dist/
+build/
 *.jks
 *.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
+*.keystore
+*.orig
+*.xccheckout
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/
+xcuserdata/
 .DS_Store
-*.pem
+ios/build/
+android/build/
+android/.gradle/
+android/app/build/
+android/app/.cxx/
+android/app/src/main/assets/
+!android/app/src/main/assets/expo-asset-map.json # Keep this specific file if it exists and is needed by Expo
 
-# local env files
-.env*.local
+# Environment variables
+.env
+.env.local
+.env.*.local
 
-# typescript
-*.tsbuildinfo
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.react-native/
+.vscode/

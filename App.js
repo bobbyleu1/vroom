@@ -1,3 +1,8 @@
+// Polyfill for structuredClone if not supported
+if (typeof globalThis.structuredClone !== 'function') {
+  globalThis.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
+}
+
 import 'react-native-get-random-values'; // <<< KEEP THIS AT THE VERY TOP
 
 import React, { useEffect, useState } from 'react';

@@ -1,140 +1,88 @@
-// screens/MoreScreen.js (Updated to link to GroupsScreen)
-
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native'; // <-- NEW IMPORT!
+import { StatusBar } from 'expo-status-bar';
 
-const { width, height } = Dimensions.get('window');
-
-function MoreScreen() {
-  const navigation = useNavigation(); // <-- Get navigation object
-
-  const handleOptionPress = (optionName) => {
-    console.log(`${optionName} pressed!`);
-    if (optionName === 'Groups') {
-      navigation.navigate('Groups'); // Navigate to the 'Groups' stack screen
-    }
-    // You can add more navigation logic for 'Forums' etc. here later
-  };
-
-  const handleClose = () => {
-    // For a tab screen, this button is primarily for visual fidelity to the example.
-    // If this were a true modal, you'd use navigation.goBack() or similar here.
-    console.log("Close button pressed (visual only for tab screen)");
-  };
-
+const MoreScreen = ({ navigation }) => { // Ensure 'navigation' prop is received
   return (
-    <View style={styles.outerContainer}>
-      <View style={styles.modalContainer}>
-        {/* Close Button (X) */}
-        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color="#fff" />
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>More</Text>
+      </View>
+      <View style={styles.content}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('Groups')} // Navigates to GroupsScreen
+        >
+          <Ionicons name="people-circle-outline" size={30} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Groups</Text>
+          <Ionicons name="chevron-forward" size={24} color="#FFF" />
         </TouchableOpacity>
 
-        {/* Title */}
-        <Text style={styles.title}>More Options</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('Forums')} // <--- THIS IS THE KEY LINE
+        >
+          <Ionicons name="chatbubbles-outline" size={30} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Forums</Text>
+          <Ionicons name="chevron-forward" size={24} color="#FFF" />
+        </TouchableOpacity>
 
-        {/* Options List */}
-        <View style={styles.optionsList}>
-          {/* Groups Option */}
-          <TouchableOpacity
-            style={styles.optionRow}
-            onPress={() => handleOptionPress('Groups')}
-          >
-            <View style={styles.iconBackground}>
-              <Ionicons name="people-outline" size={24} color="#00BFFF" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.optionTitle}>Groups</Text>
-              <Text style={styles.optionDescription}>Join car enthusiast communities</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Forums Option */}
-          <TouchableOpacity
-            style={styles.optionRow}
-            onPress={() => handleOptionPress('Forums')}
-          >
-            <View style={styles.iconBackground}>
-              <Ionicons name="chatbubbles-outline" size={24} color="#00BFFF" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.optionTitle}>Forums</Text>
-              <Text style={styles.optionDescription}>Discuss topics and get advice</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Add more options here later if needed */}
-
-        </View>
+        {/* Add more options here as needed */}
       </View>
-    </View>
+    </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  outerContainer: {
+  safeArea: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
+    backgroundColor: '#000', // Dark background
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, // Adjust for Android status bar
   },
-  modalContainer: {
-    backgroundColor: '#1C1C1E',
-    width: '100%',
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-    minHeight: height * 0.4,
+  header: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    alignItems: 'center',
   },
-  closeButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 1,
-    padding: 5,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 20,
+  headerTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 30,
-    marginTop: 10,
+    color: '#FFF', // White text for header
   },
-  optionsList: {
-    width: '100%',
+  content: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
   },
-  optionRow: {
+  button: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2C2C2E',
-    borderRadius: 10,
-    padding: 15,
+    backgroundColor: '#1C1C1E', // Darker background for buttons
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
     marginBottom: 15,
+    width: '100%',
+    maxWidth: 400, // Max width for larger screens
+    shadowColor: '#00BFFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#00BFFF',
   },
-  iconBackground: {
-    backgroundColor: '#3A3A3C',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+  buttonIcon: {
     marginRight: 15,
   },
-  textContainer: {
-    flex: 1,
-  },
-  optionTitle: {
-    color: '#fff',
-    fontSize: 16,
+  buttonText: {
+    flex: 1, // Allows text to take up remaining space
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  optionDescription: {
-    color: '#B0B0B0',
-    fontSize: 13,
+    color: '#E0E0E0', // Light gray text
   },
 });
 

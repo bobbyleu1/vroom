@@ -4,10 +4,12 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { FlatList, ActivityIndicator, Dimensions, StyleSheet } from 'react-native';
 import { supabase } from '../utils/supabase'; // Ensure this path is correct
 import VideoCard from '../components/VideoCard'; // Ensure this path is correct
+import { useNavigation } from '@react-navigation/native'; // Import useNavigation hook
 
 const { height } = Dimensions.get('window');
 
 function FeedScreen() {
+  const navigation = useNavigation(); // Get the navigation object using the hook
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -70,6 +72,7 @@ function FeedScreen() {
           item={item}
           index={index}
           currentVideoIndex={currentVideoIndex}
+          navigation={navigation} // <--- Passing the navigation prop here
         />
       )}
     />

@@ -1,5 +1,5 @@
 // screens/UploadScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,23 +18,33 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialIcons, Entypo, Feather } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
 import { v4 as uuidv4 } from 'uuid';
-import { Video } from 'expo-av';
+import { Video } from 'expo-av'; // REVERTED: Import from expo-av
 
 const { width, height } = Dimensions.get('window');
 
+/**
+ * UploadScreen component for selecting media, adding captions, and posting to Supabase.
+ * It handles media library permissions, image/video picking, preview display,
+ * media upload to Supabase Storage, and post record creation in the 'posts' table.
+ */
 export default function UploadScreen({ navigation }) {
+  // State variables for permissions, selected media, loading, and post details
   const [mediaLibraryPermission, requestMediaLibraryPermission] = MediaLibrary.usePermissions();
-
   const [selectedMediaUri, setSelectedMediaUri] = useState(null);
   const [selectedMediaType, setSelectedMediaType] = useState(null);
-
   const [loading, setLoading] = useState(false);
-  const [postTitle, setPostTitle] = useState('');
-  const [postDescription, setPostDescription] = useState('');
+  const [postDescription, setPostDescription] = useState(''); // This serves as the main caption
 
+  // Ref for the Video component to potentially capture frames (snapshotAsync from expo-av)
+  const videoRef = useRef(null);
+  // State to track if the video player is loaded and ready for snapshotting (for expo-av)
+  const [isVideoPlayerReady, setIsVideoPlayerReady] = useState(false);
+
+  /**
+   * Effect hook to request media library permissions on component mount.
+   */
   useEffect(() => {
     (async () => {
-      // Log permission status on component mount
       console.log("UploadScreen mounted. Initial Media Library Permission status:", mediaLibraryPermission?.status);
       if (!mediaLibraryPermission?.granted) {
         console.log("Media Library Permission not granted on mount. Requesting...");
@@ -42,10 +52,14 @@ export default function UploadScreen({ navigation }) {
         console.log("Permission status after initial request on mount:", status);
       }
     })();
-  }, []);
+  }, [mediaLibraryPermission]); // Dependency array includes mediaLibraryPermission to re-run if status changes
 
+  /**
+   * Handles picking media (image or video) from the device's library.
+   * Requests permissions if not already granted.
+   */
   const pickMedia = async () => {
-    console.log("pickMedia function called."); // DEBUG LOG: Entry point
+    console.log("pickMedia function called.");
 
     // Re-check permission right before attempting to pick media
     if (!mediaLibraryPermission?.granted) {
@@ -54,10 +68,7 @@ export default function UploadScreen({ navigation }) {
       console.log("Permission status after request in pickMedia:", status);
 
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant Vroom access to your photos and videos to select media. You might need to go to your device Settings > Apps > Vroom > Permissions and enable Storage/Photos access.'
-        );
+        Alert.alert('Permission required', 'Please grant Vroom access to your photos and videos to select media. You might need to go to your device Settings > Apps > Vroom > Permissions and enable Storage/Photos access.');
         console.log("Permission denied, returning from pickMedia.");
         return;
       }
@@ -65,19 +76,19 @@ export default function UploadScreen({ navigation }) {
       console.log("Media Library Permission is already granted.");
     }
 
-    console.log("Attempting to launch ImagePicker library..."); // DEBUG LOG: Before launching picker
+    console.log("Attempting to launch ImagePicker library...");
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.All, // FIXED: Use ImagePicker.MediaType.All
+      mediaTypes: ImagePicker.MediaTypeOptions.All, // Using MediaTypeOptions.All as per your working code
       allowsEditing: false,
       quality: 0.7,
     });
-    console.log("ImagePicker result:", result); // DEBUG LOG: After picker returns
+    console.log("ImagePicker result:", result);
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const uri = result.assets[0].uri;
-      let type = result.assets[0].mediaType;
+      let type = result.assets[0].mediaType; // Get the type from ImagePicker result
 
-      // Fallback: If mediaType is undefined, infer from file extension
+      // Fallback: If mediaType is undefined, infer from file extension (as seen in previous logs)
       if (!type) {
         const fileExtension = uri.split('.').pop().toLowerCase();
         if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(fileExtension)) {
@@ -92,7 +103,8 @@ export default function UploadScreen({ navigation }) {
 
       setSelectedMediaUri(uri);
       setSelectedMediaType(type);
-      console.log("Media selected and states set:", { uri, type }); // DEBUG LOG
+      setIsVideoPlayerReady(false); // Reset video ready state when new media is selected
+      console.log("Media selected and states set:", { uri, type });
     } else if (result.canceled) {
       console.log("ImagePicker was canceled by user.");
     } else {
@@ -101,15 +113,81 @@ export default function UploadScreen({ navigation }) {
     }
   };
 
+  /**
+   * Generates a thumbnail from a video URI using expo-av's snapshotAsync.
+   * Uploads the thumbnail to Supabase 'thumbnails' bucket.
+   * @param {string} videoUri - The URI of the video file.
+   * @returns {Promise<string|null>} Public URL of the uploaded thumbnail or null if failed.
+   */
+  const generateAndUploadVideoThumbnail = async (videoUri) => {
+    console.log("Attempting to generate and upload video thumbnail for:", videoUri);
+
+    // Add a small delay to ensure videoRef.current is ready for snapshotAsync
+    // This is a common workaround for expo-av timing issues.
+    await new Promise(resolve => setTimeout(resolve, 500)); // Wait 0.5 seconds
+
+    if (!videoRef.current || typeof videoRef.current.snapshotAsync !== 'function') {
+      console.error("Video ref is null or snapshotAsync is not a function. Cannot generate thumbnail.");
+      Alert.alert("Thumbnail Error", "Video player not ready for thumbnail generation or snapshot function is missing. Proceeding without thumbnail.");
+      return null; // Return null if thumbnail generation fails
+    }
+
+    try {
+      // Ensure the video is loaded before attempting snapshot
+      const playbackStatus = await videoRef.current.getStatusAsync();
+      if (!playbackStatus.isLoaded) {
+        console.error("Video is not loaded, cannot generate thumbnail.");
+        Alert.alert("Thumbnail Error", "Video not fully loaded. Please wait a moment and try again.");
+        return null;
+      }
+
+      const { uri: thumbnailUri } = await videoRef.current.snapshotAsync({
+        format: 'jpeg',
+        quality: 0.5,
+      });
+
+      console.log("Generated thumbnail URI:", thumbnailUri);
+
+      const response = await fetch(thumbnailUri);
+      const blob = await response.blob();
+      const fileName = `thumbnails/${uuidv4()}.jpeg`; // Unique name for thumbnail
+
+      const { data, error } = await supabase.storage.from('thumbnails').upload(fileName, blob, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: 'image/jpeg',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('thumbnails').getPublicUrl(fileName);
+      console.log("Thumbnail uploaded to:", publicUrlData.publicUrl);
+      return publicUrlData.publicUrl;
+
+    } catch (error) {
+      console.error('Error generating or uploading thumbnail:', error.message);
+      Alert.alert('Thumbnail Error', 'Failed to generate or upload video thumbnail: ' + error.message);
+      return null;
+    }
+  };
+
+  /**
+   * Uploads the main media file (image or video) to Supabase 'posts' bucket.
+   * @param {string} uri - The local URI of the media file.
+   * @param {string} fileType - 'image' or 'video'.
+   * @returns {Promise<string|null>} Public URL of the uploaded media or null if failed.
+   */
   const uploadMediaToSupabase = async (uri, fileType) => {
     if (!uri) return null;
 
-    setLoading(true);
+    setLoading(true); // Set loading state for the duration of upload
     try {
       const response = await fetch(uri);
       const blob = await response.blob();
       const fileExtension = uri.split('.').pop().toLowerCase();
-      const fileName = `posts/${uuidv4()}.${fileExtension}`;
+      const fileName = `posts/${uuidv4()}.${fileExtension}`; // Unique file name in 'posts' bucket
 
       const { data, error } = await supabase.storage.from('posts').upload(fileName, blob, {
         cacheControl: '3600',
@@ -129,10 +207,17 @@ export default function UploadScreen({ navigation }) {
       Alert.alert('Upload Error', 'Failed to upload media: ' + error.message);
       return null;
     } finally {
-      // setLoading(false); // Only set false after full post operation to prevent flicker
+      // setLoading(false); // Loading state is managed by handlePost's finally block
     }
   };
 
+  /**
+   * Handles the entire post creation process:
+   * 1. Uploads main media.
+   * 2. Generates and uploads video thumbnail (if applicable).
+   * 3. Creates a record in the Supabase 'posts' table.
+   * 4. Navigates to the FeedScreen on success.
+   */
   const handlePost = async () => {
     if (!selectedMediaUri) {
       Alert.alert('No Media', 'Please select an image or video to post.');
@@ -141,7 +226,9 @@ export default function UploadScreen({ navigation }) {
 
     setLoading(true);
     let publicUrl = null;
+    let thumbnailPublicUrl = null; // Initialize thumbnail URL
 
+    // Step 1: Upload the main media file
     publicUrl = await uploadMediaToSupabase(selectedMediaUri, selectedMediaType);
 
     if (!publicUrl) {
@@ -149,6 +236,16 @@ export default function UploadScreen({ navigation }) {
       return;
     }
 
+    // Step 2: If it's a video, attempt to generate and upload its thumbnail (may still be problematic with expo-av)
+    if (selectedMediaType === 'video') {
+      thumbnailPublicUrl = await generateAndUploadVideoThumbnail(selectedMediaUri);
+      // If thumbnail generation/upload fails, the post will still proceed without a thumbnail
+      if (!thumbnailPublicUrl) {
+        console.warn("Video thumbnail generation failed. Post will proceed without a thumbnail.");
+      }
+    }
+
+    // Step 3: Create post record in Supabase 'posts' table
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -158,14 +255,14 @@ export default function UploadScreen({ navigation }) {
       }
 
       const { error } = await supabase
-        .from('group_posts')
+        .from('posts') // Corrected table name to 'posts'
         .insert([
           {
             author_id: user.id,
-            post_type: selectedMediaType,
+            file_type: selectedMediaType, // Corrected column name to 'file_type'
             media_url: publicUrl,
-            title: postTitle,
-            description: postDescription,
+            thumbnail_url: thumbnailPublicUrl, // Include thumbnail URL (will be null for images or if thumbnail generation fails)
+            content: postDescription, // Corrected column name to 'content'
           },
         ]);
 
@@ -176,11 +273,11 @@ export default function UploadScreen({ navigation }) {
       Alert.alert('Success', 'Post uploaded successfully!');
       setSelectedMediaUri(null);
       setSelectedMediaType(null);
-      setPostTitle('');
       setPostDescription('');
-      // if (navigation) {
-      //   navigation.navigate('Feed');
-      // }
+
+      if (navigation) {
+        navigation.navigate('Feed'); // Navigate to FeedScreen after successful post
+      }
     } catch (error) {
       console.error('Error creating post in DB:', error.message);
       Alert.alert('Post Error', 'Failed to create post in database: ' + error.message);
@@ -189,7 +286,7 @@ export default function UploadScreen({ navigation }) {
     }
   };
 
-  // Render permission request screen if not granted
+  // Render permission request UI if permissions are not granted
   if (!mediaLibraryPermission) {
     return (
       <View style={styles.center}>
@@ -209,32 +306,43 @@ export default function UploadScreen({ navigation }) {
     );
   }
 
+  // Main render logic for the UploadScreen
   return (
     <View style={styles.container}>
-      {selectedMediaUri && ( // Only show header if media is selected (i.e., on post creation screen)
+      {/* Header for the Post Creation Screen (visible when media is selected) */}
+      {selectedMediaUri && (
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { setSelectedMediaUri(null); setSelectedMediaType(null); setPostTitle(''); setPostDescription(''); }}>
+          <TouchableOpacity onPress={() => { setSelectedMediaUri(null); setSelectedMediaType(null); setPostDescription(''); }}>
             <Ionicons name="arrow-back" size={28} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>New Post</Text>
-          <View style={{ width: 28 }} />
+          <View style={{ width: 28 }} /> {/* Spacer to balance title */}
         </View>
       )}
 
-      {selectedMediaUri ? ( // Conditional rendering for Post Creation Screen vs. Media Picker
+      {/* Conditional rendering based on whether media is selected */}
+      {selectedMediaUri ? (
+        // Post Creation Screen: Displays media preview and input fields
         <ScrollView style={styles.postCreationContainer} contentContainerStyle={styles.postCreationContent}>
+          {/* Media Preview Section */}
           <View style={styles.mediaPreviewSection}>
-            {console.log("Attempting to render Media Preview. URI:", selectedMediaUri, "Type:", selectedMediaType)} {/* DEBUG LOG */}
+            {console.log("Attempting to render Media Preview. URI:", selectedMediaUri, "Type:", selectedMediaType)}
             {selectedMediaUri ? (
               selectedMediaType === 'image' ? (
                 <Image source={{ uri: selectedMediaUri }} style={styles.selectedMedia} />
-              ) : ( // Must be video
+              ) : (
                 <Video
+                  ref={videoRef} // Assign ref to Video component for snapshotting
                   source={{ uri: selectedMediaUri }}
                   style={styles.selectedMedia}
-                  useNativeControls
-                  resizeMode="cover"
-                  isLooping
+                  useNativeControls // Controls for video playback
+                  isLooping // Loop video playback
+                  onLoadStart={() => console.log("Video Load Start (expo-av)")}
+                  onLoad={() => {
+                    console.log("Video Loaded (expo-av)");
+                    setIsVideoPlayerReady(true); // Set ready state on load
+                  }}
+                  onError={(error) => console.error("Video Playback Error (expo-av):", error)}
                 />
               )
             ) : (
@@ -242,21 +350,11 @@ export default function UploadScreen({ navigation }) {
             )}
           </View>
 
-          <View style={styles.inputSection}>
-            <TextInput
-              style={styles.titleInput}
-              placeholder="Add a catchy title"
-              placeholderTextColor="#999"
-              value={postTitle}
-              onChangeText={setPostTitle}
-              maxLength={100}
-            />
-          </View>
-
+          {/* Caption Input Section */}
           <View style={styles.inputSection}>
             <TextInput
               style={styles.descriptionInput}
-              placeholder="Writing a long description can help get 3x more views on average."
+              placeholder="Add your caption here..."
               placeholderTextColor="#999"
               multiline
               value={postDescription}
@@ -271,6 +369,7 @@ export default function UploadScreen({ navigation }) {
             </View>
           </View>
 
+          {/* Post Options Section */}
           <View style={styles.optionsSection}>
             <TouchableOpacity style={styles.optionItem}>
               <View style={styles.optionLeft}>
@@ -311,6 +410,7 @@ export default function UploadScreen({ navigation }) {
               <Ionicons name="chevron-forward" size={20} color="#fff" />
             </TouchableOpacity>
 
+            {/* Share To section */}
             <View style={styles.shareToSection}>
               <Text style={styles.shareToText}>Share to</Text>
               <View style={styles.shareIcons}>
@@ -324,6 +424,7 @@ export default function UploadScreen({ navigation }) {
 
         </ScrollView>
       ) : (
+        // Initial Media Picker Screen: Placeholder for camera and gallery upload button
         <View style={styles.cameraPlaceholderContainer}>
           <Text style={styles.comingSoonText}>Camera function coming soon!</Text>
           <Text style={styles.thirdPartyText}>
@@ -336,7 +437,8 @@ export default function UploadScreen({ navigation }) {
         </View>
       )}
 
-      {selectedMediaUri && ( // Only show bottom buttons if media is selected
+      {/* Fixed bottom buttons (Drafts and Post) */}
+      {selectedMediaUri && (
         <View style={styles.bottomButtonsContainer}>
           <TouchableOpacity
             style={styles.draftsButton}
@@ -384,7 +486,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   permissionButton: {
-    backgroundColor: '#00BFFF', // Light Blue
+    backgroundColor: '#00BFFF',
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
@@ -401,10 +503,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     paddingHorizontal: 20,
-    backgroundColor: '#1a1a1a', // Dark Gray
+    backgroundColor: '#1a1a1a',
   },
   comingSoonText: {
-    color: '#00BFFF', // Light Blue
+    color: '#00BFFF',
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
@@ -418,21 +520,21 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   uploadGalleryButton: {
-    backgroundColor: '#00BFFF', // Light Blue
+    backgroundColor: '#00BFFF',
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 30,
     gap: 10,
-    shadowColor: '#00BFFF', // Light Blue shadow
+    shadowColor: '#00BFFF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
     shadowRadius: 3,
     elevation: 5,
   },
   uploadGalleryButtonText: {
-    color: '#000', // Black for contrast
+    color: '#000',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -444,52 +546,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingTop: Platform.OS === 'android' ? 10 : 50,
     paddingBottom: 10,
-    backgroundColor: '#000', // Black
+    backgroundColor: '#000',
     borderBottomWidth: 0.5,
-    borderBottomColor: '#333', // Darker gray for subtle border
+    borderBottomColor: '#333',
   },
   headerTitle: {
-    color: '#fff', // White
+    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
   postCreationContainer: {
     flex: 1,
-    backgroundColor: '#000', // Black
+    backgroundColor: '#000',
   },
   postCreationContent: {
-    paddingBottom: 100, // Space for fixed bottom buttons
+    paddingBottom: 100,
   },
   mediaPreviewSection: {
     width: '100%',
-    height: width * 0.7, // Fixed aspect ratio for preview container
-    backgroundColor: '#1a1a1a', // Dark Gray
+    height: width * 0.7,
+    backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 15,
-    overflow: 'hidden', // Crucial for 'cover' resizeMode
+    overflow: 'hidden',
   },
   selectedMedia: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover', // Fills the space, may crop
+    resizeMode: 'cover',
   },
   inputSection: {
-    backgroundColor: '#1a1a1a', // Dark Gray
+    backgroundColor: '#1a1a1a',
     borderRadius: 10,
     marginHorizontal: 15,
     marginBottom: 15,
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
-  titleInput: {
-    color: '#fff', // White
-    fontSize: 16,
-    paddingVertical: 8,
-    fontWeight: '600',
-  },
   descriptionInput: {
-    color: '#fff', // White
+    color: '#fff',
     fontSize: 14,
     minHeight: 80,
     textAlignVertical: 'top',
@@ -498,14 +594,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginTop: 10,
     borderTopWidth: 0.5,
-    borderTopColor: '#333', // Darker gray
+    borderTopColor: '#333',
     paddingTop: 10,
   },
   descriptionIcon: {
     marginRight: 15,
   },
   optionsSection: {
-    backgroundColor: '#1a1a1a', // Dark Gray
+    backgroundColor: '#1a1a1a',
     borderRadius: 10,
     marginHorizontal: 15,
     marginBottom: 15,
@@ -518,14 +614,14 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 15,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#333', // Darker gray
+    borderBottomColor: '#333',
   },
   optionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   optionText: {
-    color: '#fff', // White
+    color: '#fff',
     fontSize: 16,
     marginLeft: 10,
   },
@@ -533,7 +629,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF4500', // Specific accent red
+    backgroundColor: '#FF4500',
     marginLeft: 8,
   },
   locationTags: {
@@ -542,11 +638,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingBottom: 10,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#333', // Darker gray
+    borderBottomColor: '#333',
   },
   locationTag: {
-    backgroundColor: '#333', // Even darker gray for tags
-    color: '#fff', // White
+    backgroundColor: '#333',
+    color: '#fff',
     fontSize: 12,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -558,7 +654,7 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   shareToText: {
-    color: '#fff', // White
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 10,
@@ -573,29 +669,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a', // Dark Gray
+    backgroundColor: '#1a1a1a',
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderTopWidth: 0.5,
-    borderTopColor: '#333', // Darker gray
+    borderTopColor: '#333',
     position: 'absolute',
     bottom: 0,
     width: '100%',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 10, // Adjust for safe area on iOS
+    paddingBottom: Platform.OS === 'ios' ? 34 : 10,
   },
   draftsButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#333', // Darker gray
+    backgroundColor: '#333',
     paddingVertical: 12,
     borderRadius: 25,
     marginRight: 10,
     gap: 5,
   },
   draftsButtonText: {
-    color: '#fff', // White
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -604,14 +700,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00BFFF', // Light Blue
+    backgroundColor: '#00BFFF',
     paddingVertical: 12,
     borderRadius: 25,
     marginLeft: 10,
     gap: 5,
   },
   postButtonText: {
-    color: '#000', // Black for contrast
+    color: '#000',
     fontSize: 16,
     fontWeight: 'bold',
   },

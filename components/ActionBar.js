@@ -1,52 +1,69 @@
-// components/ActionBar.js
-
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Share, Alert } from 'react-native'; // Added Share and Alert as they are used
-import heartIcon from '../assets/icons/heart.png';    // Path relative to components/ActionBar.js
-import commentIcon from '../assets/icons/comment.png'; // Path relative to components/ActionBar.js
-import shareIcon from '../assets/icons/share.png';     // Path relative to components/ActionBar.js
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { AntDesign, Ionicons, Feather } from '@expo/vector-icons';
 
-function ActionBar({ post, onLikePress }) {
-  // Share.share and Alert.alert are built-in React Native, no extra import needed for them
+// Utility function to format numbers (copied for self-containment)
+const formatCount = (num) => {
+  if (num === null || num === undefined) return '0';
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M';
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K';
+  }
+  return num.toString();
+};
+
+const ActionBar = ({ post, hasLiked, localLikeCount, onLikePress, onCommentPress, onSharePress }) => {
   return (
-    <View style={styles.actionBar}>
-      <TouchableOpacity onPress={() => onLikePress(post.id)} style={styles.actionButton}>
-        <Image source={heartIcon} style={styles.actionIcon} />
-        <Text style={styles.actionText}>{post.like_count}</Text>
+    <View style={styles.container}>
+      {/* Like Button */}
+      <TouchableOpacity style={styles.actionButton} onPress={onLikePress}>
+        <AntDesign name="heart" size={30} color={hasLiked ? 'red' : 'white'} />
+        <Text style={styles.actionText}>{formatCount(localLikeCount)}</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => Alert.alert('Comments', 'Coming soon')} style={styles.actionButton}>
-        <Image source={commentIcon} style={styles.actionIcon} />
-        <Text style={styles.actionText}>{post.comment_count}</Text>
+
+      {/* Comment Button */}
+      <TouchableOpacity style={styles.actionButton} onPress={onCommentPress}>
+        <Ionicons name="chatbubble-ellipses" size={30} color="white" />
+        <Text style={styles.actionText}>{formatCount(post.comment_count || 0)}</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => Share.share({ message: post.media_url })} style={styles.actionButton}>
-        <Image source={shareIcon} style={styles.actionIcon} />
+
+      {/* Share Button */}
+      <TouchableOpacity style={styles.actionButton} onPress={onSharePress}>
+        <Feather name="share" size={30} color="white" />
         <Text style={styles.actionText}>Share</Text>
       </TouchableOpacity>
     </View>
   );
-}
+};
 
-// Styles specific to the ActionBar
 const styles = StyleSheet.create({
-  actionBar: {
-    position: 'absolute', // This keeps it floating over the video
-    right: 15,            // Distance from the right edge
-    bottom: 120,          // Distance from the bottom edge
-    alignItems: 'center'  // Centers the items vertically
+  container: {
+    position: 'absolute',
+    right: 15,
+    bottom: 85, // Position above the bottom navigation bar
+    alignItems: 'center',
+    zIndex: 1, // Ensure it's above other overlays
   },
   actionButton: {
-    alignItems: 'center', // Centers icon and text
-    marginBottom: 20      // Space between each button (heart, comment, share)
-  },
-  actionIcon: {
-    width: 40,
-    height: 40,
-    tintColor: 'white', // Makes the icons white
-    marginBottom: 4     // Space between icon and text
+    marginBottom: 20, // Spacing between buttons
+    alignItems: 'center',
+    // Add subtle shadow to buttons for better visibility on video
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 2,
+    elevation: 5,
   },
   actionText: {
-    color: 'white',     // Text color
-    fontSize: 14        // Text size
+    color: 'white',
+    fontSize: 12,
+    marginTop: 5,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)', // Add shadow for readability
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
 });
 

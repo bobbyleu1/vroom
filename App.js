@@ -23,7 +23,8 @@ import FriendsScreen from './screens/FriendsScreen';
 import MoreScreen from './screens/MoreScreen';
 import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
-// import CreateGroupScreen from './screens/CreateGroupScreen'; // <--- REMOVED: No longer needed as it's a modal
+import ForumsScreen from './screens/ForumsScreen';
+import ForumPostDetailScreen from './screens/ForumPostDetailScreen';
 
 // Supabase utility
 import { supabase } from './utils/supabase';
@@ -118,7 +119,8 @@ export default function App() {
             {/* Groups related screens */}
             <Stack.Screen name="Groups" component={GroupsScreen} />
             <Stack.Screen name="GroupDetail" component={GroupDetailScreen} />
-            {/* <Stack.Screen name="CreateGroup" component={CreateGroupScreen} /> // <--- REMOVED */}
+            <Stack.Screen name="Forums" component={ForumsScreen} />
+            <Stack.Screen name="ForumPostDetail" component={ForumPostDetailScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

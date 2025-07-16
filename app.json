@@ -19,7 +19,6 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Vroom needs access to your camera to allow you to record and upload videos.",
         "NSPhotoLibraryUsageDescription": "Vroom needs access to your media library to upload saved videos or images.",
-        
         "NSMicrophoneUsageDescription": "Vroom needs access to your microphone to record audio for videos."
       }
     },
@@ -42,7 +41,6 @@
     },
     "plugins": [
       "expo-camera",
-     
       [
         "expo-image-picker",
         {
@@ -50,9 +48,7 @@
           "cameraPermission": "The app needs access to your camera to take photos and videos.",
           "microphonePermission": "The app needs access to your microphone to record videos."
         }
-      ],
-      
-      "expo-video"
+      ]
     ],
     "extra": {
       "eas": {

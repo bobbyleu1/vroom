@@ -1,3 +1,4 @@
+
 # Dependency directories
 node_modules/
 .yarn/cache/
@@ -40,3 +41,10 @@ yarn-error.log*
 # Misc
 .react-native/
 .vscode/
+
+node_modules
+.DS_Store
+.expo
+.expo-shared
+*.log
+.env

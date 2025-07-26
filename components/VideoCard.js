@@ -1,38 +1,70 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions, Animated, ScrollView, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Dimensions,
+  Animated,
+  Alert,
+} from 'react-native';
 import { Video } from 'expo-av';
 import { useFocusEffect } from '@react-navigation/native';
-import { AntDesign, Ionicons, Feather } from '@expo/vector-icons';
+import { AntDesign } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
 import ActionBar from './ActionBar';
-import CommentsModal from './CommentsModal'; // Import the new CommentsModal
+import CommentsModal from './CommentsModal';
 
+// Grab the device dimensions once so we can calculate responsive styles
 const { height, width } = Dimensions.get('window');
 
-// Utility function to format numbers (e.g., 12345 -> 12.3K)
+/**
+ * Format a numeric count into a more human‑readable string. For example
+ * 1234 → "1.2K". Values under 1k are returned as‑is.
+ *
+ * @param {number|null|undefined} num The number to format
+ * @returns {string}
+ */
 const formatCount = (num) => {
   if (num === null || num === undefined) return '0';
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(1) + 'M';
   }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
+  if (num >= 1_000) {
+    return (num / 1_000).toFixed(1) + 'K';
   }
   return num.toString();
 };
 
+/**
+ * VideoCard renders a single vertical video along with the associated meta
+ * information (author, caption, like/comment buttons, etc.) similar to a
+ * TikTok or Instagram Reels card.
+ *
+ * It handles playing/pausing the video based on visibility and user
+ * interactions such as double tapping to like and opening the comments
+ * modal. Like and comment counts are kept in sync with Supabase in real
+ * time via a channel subscription.
+ */
 function VideoCard({ item, index, currentVideoIndex, navigation }) {
   const videoRef = useRef(null);
   const [heartScale] = useState(new Animated.Value(0));
   const [currentUserId, setCurrentUserId] = useState(null);
   const [hasLiked, setHasLiked] = useState(false);
+  // localLikeCount and commentCount mirror the values in Supabase and are
+  // updated both optimistically when the user likes/unlikes and via the
+  // realtime subscription below.
   const [localLikeCount, setLocalLikeCount] = useState(item.like_count || 0);
-  const [isCommentsModalVisible, setIsCommentsModalVisible] = useState(false); // State for modal visibility
+  const [commentCount, setCommentCount] = useState(item.comment_count || 0);
+  const [isCommentsModalVisible, setIsCommentsModalVisible] = useState(false);
 
-  // Fetch current user ID on component mount
+  // Fetch the authenticated user's ID on mount
   useEffect(() => {
     const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
         setCurrentUserId(user.id);
       }
@@ -40,17 +72,19 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
     fetchUser();
   }, []);
 
-  // Fetch user's like status for this post
+  /**
+   * Determine whether the current user has liked this post. Supabase RLS
+   * ensures each user can only see their own like record. We call this
+   * whenever the user ID or post ID changes.
+   */
   const fetchUserLikeStatus = useCallback(async () => {
     if (!currentUserId || !item.id) return;
-
     const { data, error } = await supabase
       .from('post_likes')
       .select('id')
       .eq('user_id', currentUserId)
       .eq('post_id', item.id)
       .single();
-
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching like status:', error.message);
     } else {
@@ -64,8 +98,59 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
     }
   }, [currentUserId, fetchUserLikeStatus]);
 
+  /**
+   * Fetch the latest like_count and comment_count from Supabase for this
+   * post. This runs when the component mounts and whenever the post ID
+   * changes. It ensures our counts are in sync even if the feed item is
+   * stale. We also set up a realtime channel subscription to listen for
+   * updates on this specific post row.
+   */
+  /**
+   * Fetch and subscribe to like/comment counts for this post. Exposed as a
+   * function so it can also be triggered manually (e.g. when closing the
+   * comments modal). The subscription listens for updates on the posts table
+   * filtered by this post's ID.
+   */
+  const refreshCounts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('posts')
+      .select('like_count, comment_count')
+      .eq('id', item.id)
+      .single();
+    if (!error && data) {
+      setLocalLikeCount(data.like_count);
+      setCommentCount(data.comment_count);
+    } else if (error) {
+      console.error('Error fetching counts:', error.message);
+    }
+  }, [item.id]);
 
-  // Auto-play/pause video based on visibility
+  useEffect(() => {
+    // Initially fetch counts
+    refreshCounts();
+    // Set up realtime subscription for this post
+    const channel = supabase
+      .channel(`public:posts:${item.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'posts', filter: `id=eq.${item.id}` },
+        (payload) => {
+          const { like_count: newLikeCount, comment_count: newCommentCount } = payload.new;
+          setLocalLikeCount(newLikeCount);
+          setCommentCount(newCommentCount);
+        },
+      )
+      .subscribe();
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [item.id, refreshCounts]);
+
+  /**
+   * Auto‑play or pause the video depending on whether it is the currently
+   * visible card. The FeedScreen passes down the index of the visible card
+   * via currentVideoIndex.
+   */
   useEffect(() => {
     if (videoRef.current) {
       if (index === currentVideoIndex) {
@@ -76,7 +161,7 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
     }
   }, [index, currentVideoIndex]);
 
-  // Pause video when screen loses focus
+  // Pause the video when the screen loses focus
   useFocusEffect(
     useCallback(() => {
       return () => {
@@ -84,81 +169,103 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
           videoRef.current.pauseAsync().catch(() => {});
         }
       };
-    }, [])
+    }, []),
   );
 
+  /**
+   * Scale and fade the heart icon when a like is triggered. This uses
+   * Animated.sequence to handle the in/out timing.
+   */
   const animateHeart = () => {
     Animated.sequence([
-      Animated.spring(heartScale, { toValue: 1, friction: 2, tension: 40, useNativeDriver: true }),
-      Animated.spring(heartScale, { toValue: 0, friction: 2, tension: 40, useNativeDriver: true, delay: 500 }),
+      Animated.spring(heartScale, {
+        toValue: 1,
+        friction: 2,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.spring(heartScale, {
+        toValue: 0,
+        friction: 2,
+        tension: 40,
+        useNativeDriver: true,
+        delay: 500,
+      }),
     ]).start();
   };
 
-  // Handle liking/unliking a post (called by double tap and action bar)
+  /**
+   * Handle liking or unliking the post. We optimistically update UI and
+   * revert if an error occurs. The actual insertion/deletion in
+   * post_likes will trigger the database trigger to update posts.like_count,
+   * which our realtime subscription above will catch.
+   */
   const handleLike = async () => {
     if (!currentUserId) {
       Alert.alert('Login Required', 'Please log in to like posts.');
       return;
     }
-
-    // Optimistic UI update
-    setHasLiked(prev => !prev);
-    setLocalLikeCount(prevCount => prevCount + (hasLiked ? -1 : 1));
-
+    // Capture current like state before toggling to avoid race conditions
+    const currentlyLiked = hasLiked;
+    // Optimistically update UI
+    setHasLiked(!currentlyLiked);
+    setLocalLikeCount((prevCount) => prevCount + (currentlyLiked ? -1 : 1));
     try {
-      if (hasLiked) {
-        // Unlike the post
+      if (currentlyLiked) {
+        // User is unliking
         const { error } = await supabase
           .from('post_likes')
           .delete()
           .eq('user_id', currentUserId)
           .eq('post_id', item.id);
-
         if (error) {
           console.error('Error unliking post:', error.message);
           Alert.alert('Error', 'Failed to unlike post. Please try again.');
           // Revert optimistic update
-          setHasLiked(prev => !prev);
-          setLocalLikeCount(prevCount => prevCount + 1);
+          setHasLiked((prev) => !prev);
+          setLocalLikeCount((prevCount) => prevCount + 1);
         }
       } else {
-        // Like the post
+        // User is liking
         const { error } = await supabase
           .from('post_likes')
           .insert({ user_id: currentUserId, post_id: item.id });
-
         if (error) {
           console.error('Error liking post:', error.message);
           Alert.alert('Error', 'Failed to like post. Please try again.');
           // Revert optimistic update
-          setHasLiked(prev => !prev);
-          setLocalLikeCount(prevCount => prevCount - 1);
+          setHasLiked((prev) => !prev);
+          setLocalLikeCount((prevCount) => prevCount - 1);
         }
       }
     } catch (error) {
       console.error('Exception during like/unlike:', error.message);
       Alert.alert('Error', 'An unexpected error occurred.');
       // Revert optimistic update
-      setHasLiked(prev => !prev);
-      setLocalLikeCount(prevCount => prevCount + (hasLiked ? 1 : -1));
+      setHasLiked((prev) => !prev);
+      setLocalLikeCount((prevCount) => prevCount + (currentlyLiked ? 1 : -1));
     }
   };
 
+  /**
+   * Trigger the heart animation and like action on a double tap. Disabled
+   * when the comments modal is open so the user can scroll freely.
+   */
   const handleDoubleTap = () => {
-    // Only allow double tap if comments modal is not visible
     if (!isCommentsModalVisible) {
       animateHeart();
-      // Trigger like action on double tap if not already liked
       if (!hasLiked) {
         handleLike();
       }
     }
   };
 
+  // Show the comments modal
   const handleComment = () => {
-    setIsCommentsModalVisible(true); // Show the comments modal
+    setIsCommentsModalVisible(true);
   };
 
+  // Placeholder share handler
   const handleShare = () => {
     console.log(`Share post: ${item.id}`);
     Alert.alert('Share', 'This would open the share options for the post.');
@@ -167,9 +274,10 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
   return (
     <TouchableOpacity
       activeOpacity={1}
-      onPress={handleDoubleTap} // Double tap for like
+      onPress={handleDoubleTap}
       style={styles.videoContainer}
-      disabled={isCommentsModalVisible} // Disable interaction when modal is open
+      // Disable interactions when the comments modal is open
+      disabled={isCommentsModalVisible}
     >
       <Video
         ref={videoRef}
@@ -177,25 +285,27 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
         style={styles.videoPlayer}
         resizeMode="cover"
         isLooping
-        shouldPlay={false} // Controlled by useEffect
+        shouldPlay={false} // Controlled externally via useEffect
       />
-
       {/* Overlay for text and actions */}
       <View style={styles.overlayContainer}>
         {/* Left side: Username and Caption */}
         <View style={styles.leftContent}>
           {item.profiles?.username && (
-            <Text style={styles.usernameText}>
-              @{item.profiles.username}
-            </Text>
+            <Text style={styles.usernameText}>@{item.profiles.username}</Text>
           )}
           {item.content ? (
-            <ScrollView style={styles.captionScrollView} showsVerticalScrollIndicator={false}>
-              <Text style={styles.captionText}>{item.content}</Text>
-            </ScrollView>
+            // Use numberOfLines and ellipsizeMode to truncate long captions to
+            // two lines rather than allowing scrolling or overlap.
+            <Text
+              style={styles.captionText}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {item.content}
+            </Text>
           ) : null}
         </View>
-
         {/* Animated Heart Overlay */}
         <Animated.View
           style={[
@@ -209,41 +319,42 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
           <AntDesign name="heart" size={100} color="white" />
         </Animated.View>
       </View>
-
       {/* Avatar */}
       {item.profiles?.avatar_url && (
-        <Image
-          source={{ uri: item.profiles.avatar_url }}
-          style={styles.avatar}
-        />
+        <Image source={{ uri: item.profiles.avatar_url }} style={styles.avatar} />
       )}
-
       {/* Action Bar */}
       <ActionBar
         post={item}
         hasLiked={hasLiked}
         localLikeCount={localLikeCount}
+        commentCount={commentCount}
         onLikePress={handleLike}
         onCommentPress={handleComment}
         onSharePress={handleShare}
       />
-
       {/* Comments Modal */}
       <CommentsModal
         isVisible={isCommentsModalVisible}
-        onClose={() => setIsCommentsModalVisible(false)}
+        onClose={() => {
+          setIsCommentsModalVisible(false);
+          // Refresh counts when closing the modal to pick up any new comments
+          refreshCounts();
+        }}
         postId={item.id}
-        postCommentCount={item.comment_count}
+        postCommentCount={commentCount}
       />
     </TouchableOpacity>
   );
 }
 
+// Stylesheet for the component. Many values are derived from the screen
+// dimensions so the layout adapts gracefully to different device sizes.
 const styles = StyleSheet.create({
   videoContainer: {
     height: height,
-    width: width, // Ensure it takes full width
-    backgroundColor: '#000', // Fallback background
+    width: width,
+    backgroundColor: '#000',
   },
   videoPlayer: {
     width: '100%',
@@ -251,29 +362,26 @@ const styles = StyleSheet.create({
   },
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end', // Aligns content to the bottom
+    justifyContent: 'flex-end',
     paddingHorizontal: 15,
-    paddingBottom: 150, // Space for the bottom nav bar + ActionBar
-    flexDirection: 'row', // To position left and right content
-    alignItems: 'flex-end', // Align items to the bottom of the container
+    paddingBottom: 150,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   leftContent: {
-    flex: 1, // Takes up remaining space
-    justifyContent: 'flex-end', // Aligns content to bottom of its own container
-    marginRight: 10, // Space between left content and action bar
-    paddingBottom: 10, // Padding from the very bottom of the overlay container
+    flex: 1,
+    justifyContent: 'flex-end',
+    marginRight: 10,
+    paddingBottom: 10,
   },
   usernameText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 5,
+    marginBottom: 4,
     textShadowColor: 'rgba(0,0,0,0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
-  },
-  captionScrollView: {
-    maxHeight: height * 0.15, // Adjusted max height for caption to fit comfortably
   },
   captionText: {
     color: '#fff',
@@ -286,7 +394,7 @@ const styles = StyleSheet.create({
   avatar: {
     position: 'absolute',
     right: 12,
-    top: height * 0.45, // Position relative to screen height
+    top: height * 0.45,
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -297,13 +405,12 @@ const styles = StyleSheet.create({
   },
   animatedHeart: {
     position: 'absolute',
-    left: '50%', // Start from 50% from the left
-    top: '50%',  // Start from 50% from the top
+    left: '50%',
+    top: '50%',
     width: 100,
     height: 100,
     justifyContent: 'center',
     alignItems: 'center',
-    // Use transform to precisely center the heart based on its own dimensions
     transform: [{ translateX: -50 }, { translateY: -50 }],
   },
 });

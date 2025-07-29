@@ -13,7 +13,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons, Feather, Entypo } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 
-// Importing all the screen components
+// Screen imports
 import UploadScreen from './screens/UploadScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -25,8 +25,9 @@ import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
 import ForumsScreen from './screens/ForumsScreen';
 import ForumPostDetailScreen from './screens/ForumPostDetailScreen';
+import NotificationsScreen from './screens/NotificationsScreen'; // ✅ NEW IMPORT
 
-// Supabase utility
+// Supabase
 import { supabase } from './utils/supabase';
 
 const Tab = createBottomTabNavigator();
@@ -69,6 +70,7 @@ function MainApp() {
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
+
           return <IconComponent name={iconName} size={size} color={color} />;
         },
       })}
@@ -116,11 +118,11 @@ export default function App() {
           <>
             <Stack.Screen name="MainApp" component={MainApp} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-            {/* Groups related screens */}
             <Stack.Screen name="Groups" component={GroupsScreen} />
             <Stack.Screen name="GroupDetail" component={GroupDetailScreen} />
             <Stack.Screen name="Forums" component={ForumsScreen} />
             <Stack.Screen name="ForumPostDetail" component={ForumPostDetailScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 
-const MoreScreen = ({ navigation }) => { // Ensure 'navigation' prop is received
+const MoreScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
@@ -12,7 +12,7 @@ const MoreScreen = ({ navigation }) => { // Ensure 'navigation' prop is received
       <View style={styles.content}>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => navigation.navigate('Groups')} // Navigates to GroupsScreen
+          onPress={() => navigation.navigate('Groups')}
         >
           <Ionicons name="people-circle-outline" size={30} color="#FFF" style={styles.buttonIcon} />
           <Text style={styles.buttonText}>Groups</Text>
@@ -21,14 +21,21 @@ const MoreScreen = ({ navigation }) => { // Ensure 'navigation' prop is received
 
         <TouchableOpacity
           style={styles.button}
-          onPress={() => navigation.navigate('Forums')} // <--- THIS IS THE KEY LINE
+          onPress={() => navigation.navigate('Forums')}
         >
           <Ionicons name="chatbubbles-outline" size={30} color="#FFF" style={styles.buttonIcon} />
           <Text style={styles.buttonText}>Forums</Text>
           <Ionicons name="chevron-forward" size={24} color="#FFF" />
         </TouchableOpacity>
 
-        {/* Add more options here as needed */}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('Notifications')}
+        >
+          <Ionicons name="notifications-outline" size={30} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Notifications</Text>
+          <Ionicons name="chevron-forward" size={24} color="#FFF" />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -37,8 +44,8 @@ const MoreScreen = ({ navigation }) => { // Ensure 'navigation' prop is received
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000', // Dark background
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, // Adjust for Android status bar
+    backgroundColor: '#000',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   header: {
     paddingHorizontal: 15,
@@ -50,7 +57,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFF', // White text for header
+    color: '#FFF',
   },
   content: {
     flex: 1,
@@ -60,13 +67,13 @@ const styles = StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C1E', // Darker background for buttons
+    backgroundColor: '#1C1C1E',
     borderRadius: 12,
     paddingVertical: 15,
     paddingHorizontal: 20,
     marginBottom: 15,
     width: '100%',
-    maxWidth: 400, // Max width for larger screens
+    maxWidth: 400,
     shadowColor: '#00BFFF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -79,10 +86,10 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   buttonText: {
-    flex: 1, // Allows text to take up remaining space
+    flex: 1,
     fontSize: 18,
     fontWeight: '600',
-    color: '#E0E0E0', // Light gray text
+    color: '#E0E0E0',
   },
 });
 

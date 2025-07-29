@@ -20,7 +20,8 @@
         "NSCameraUsageDescription": "Vroom needs access to your camera to allow you to record and upload videos.",
         "NSPhotoLibraryUsageDescription": "Vroom needs access to your media library to upload saved videos or images.",
         "NSMicrophoneUsageDescription": "Vroom needs access to your microphone to record audio for videos."
-      }
+      },
+      "appleTeamId": "Y9LC8G72Z7"
     },
     "android": {
       "adaptiveIcon": {

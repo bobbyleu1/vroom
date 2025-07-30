@@ -1,9 +1,17 @@
-// /screens/AuthScreen.js
-
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+} from 'react-native';
 import { supabase } from '../utils/supabase';
-
+import { Ionicons } from '@expo/vector-icons';
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -30,85 +38,139 @@ export default function AuthScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <Text style={styles.title}>{isSignUp ? 'Create Account' : 'Log In'}</Text>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.wrapper}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Logo */}
+        <View style={styles.logoRow}>
+          <Text style={styles.logoText}>Vroom</Text>
+          <Ionicons name="car-sport" size={32} color="#00BFFF" style={{ marginLeft: 6 }} />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#888"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+        {/* Email */}
+        <View style={styles.inputContainer}>
+          <Ionicons name="mail-outline" size={20} color="#888" style={styles.icon} />
+          <TextInput
+            placeholder="Email"
+            placeholderTextColor="#888"
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#888"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        {/* Password */}
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.icon} />
+          <TextInput
+            placeholder="Password"
+            placeholderTextColor="#888"
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+        </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleAuth} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Log In'}</Text>
-      </TouchableOpacity>
+        {/* Auth Button */}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleAuth}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Log In'}
+          </Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-        <Text style={styles.switchText}>
-          {isSignUp ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
-        </Text>
-      </TouchableOpacity>
-    </KeyboardAvoidingView>
+        {/* Switch */}
+        <Text style={styles.orText}>Or</Text>
+        <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
+          <Text style={styles.switchText}>
+            {isSignUp ? 'Log In' : 'Sign Up'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Footer */}
+        <Text style={styles.footerText}>Powered by <Text style={{ color: '#888' }}>Vroom</Text></Text>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#0b0c10', // soft black
+  },
+  wrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  logoRow: {
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    marginBottom: 40,
   },
-  title: {
-    color: '#00BFFF',
-    fontSize: 28,
+  logoText: {
+    fontSize: 36,
     fontWeight: 'bold',
-    marginBottom: 32,
+    color: '#fff',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+  },
+  icon: {
+    marginRight: 8,
   },
   input: {
-    width: '100%',
-    backgroundColor: '#111',
+    flex: 1,
     color: '#fff',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
     fontSize: 16,
-    marginBottom: 16,
+    paddingVertical: 14,
   },
   button: {
     backgroundColor: '#00BFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 16,
+    marginTop: 4,
   },
   buttonText: {
     color: '#fff',
+    fontWeight: '700',
     fontSize: 18,
-    fontWeight: 'bold',
+  },
+  orText: {
+    textAlign: 'center',
+    color: '#888',
+    marginVertical: 16,
+    fontSize: 16,
   },
   switchText: {
     color: '#00BFFF',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 40,
+  },
+  footerText: {
+    textAlign: 'center',
+    color: '#444',
     fontSize: 14,
-    marginTop: 8,
+    position: 'absolute',
+    bottom: 20,
+    width: '100%',
   },
 });

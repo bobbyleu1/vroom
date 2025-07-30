@@ -9,24 +9,24 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		53F769D53A2E9553774CDCE0 /* libPods-vroommobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CD066CA85C29AA456FD6E3B2 /* libPods-vroommobile.a */; };
-		6F9BF5B1FC9CE365AD59C2DE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 11D6A4E3B61A077ACD65417F /* PrivacyInfo.xcprivacy */; };
-		942BCD42DEBB71070DF1B1C1 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68AFE5AD1E519699ADE9041 /* ExpoModulesProvider.swift */; };
+		A4A586D190394EAE075D3544 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34CABF1741A113D3692A411C /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		BEBCB4793F4C1169492914DC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 56167730555D4A50AB077584 /* PrivacyInfo.xcprivacy */; };
+		CD08E6C804A5A05CDF9D6DD6 /* libPods-vroommobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D69C7CFFECA01D2D768B4FE /* libPods-vroommobile.a */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		11D6A4E3B61A077ACD65417F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = vroommobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* vroommobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vroommobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = vroommobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = vroommobile/Info.plist; sourceTree = "<group>"; };
-		19E0848AFE53E78139D9498F /* Pods-vroommobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-vroommobile.debug.xcconfig"; path = "Target Support Files/Pods-vroommobile/Pods-vroommobile.debug.xcconfig"; sourceTree = "<group>"; };
-		20B3F94BB39D709426274E99 /* Pods-vroommobile.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-vroommobile.release.xcconfig"; path = "Target Support Files/Pods-vroommobile/Pods-vroommobile.release.xcconfig"; sourceTree = "<group>"; };
+		34CABF1741A113D3692A411C /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-vroommobile/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		4980644AE0449094EAE16DDD /* Pods-vroommobile.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-vroommobile.release.xcconfig"; path = "Target Support Files/Pods-vroommobile/Pods-vroommobile.release.xcconfig"; sourceTree = "<group>"; };
+		56167730555D4A50AB077584 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = vroommobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		9D69C7CFFECA01D2D768B4FE /* libPods-vroommobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-vroommobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = vroommobile/SplashScreen.storyboard; sourceTree = "<group>"; };
-		B68AFE5AD1E519699ADE9041 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-vroommobile/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		CD066CA85C29AA456FD6E3B2 /* libPods-vroommobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-vroommobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7BF5805C3D0F5E30DFEA27E /* Pods-vroommobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-vroommobile.debug.xcconfig"; path = "Target Support Files/Pods-vroommobile/Pods-vroommobile.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = vroommobile/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* vroommobile-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "vroommobile-Bridging-Header.h"; path = "vroommobile/vroommobile-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				53F769D53A2E9553774CDCE0 /* libPods-vroommobile.a in Frameworks */,
+				CD08E6C804A5A05CDF9D6DD6 /* libPods-vroommobile.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,7 +53,7 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				11D6A4E3B61A077ACD65417F /* PrivacyInfo.xcprivacy */,
+				56167730555D4A50AB077584 /* PrivacyInfo.xcprivacy */,
 			);
 			name = vroommobile;
 			sourceTree = "<group>";
@@ -62,25 +62,25 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				CD066CA85C29AA456FD6E3B2 /* libPods-vroommobile.a */,
+				9D69C7CFFECA01D2D768B4FE /* libPods-vroommobile.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		68E4D008EDC079CF7318481C /* Pods */ = {
+		2E3411402F68E1A0AF90CB94 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				19E0848AFE53E78139D9498F /* Pods-vroommobile.debug.xcconfig */,
-				20B3F94BB39D709426274E99 /* Pods-vroommobile.release.xcconfig */,
+				E7BF5805C3D0F5E30DFEA27E /* Pods-vroommobile.debug.xcconfig */,
+				4980644AE0449094EAE16DDD /* Pods-vroommobile.release.xcconfig */,
 			);
 			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
-		6B2AD932B899857F370A0CBC /* vroommobile */ = {
+		63FB4BCC56EB784C4AA30F01 /* vroommobile */ = {
 			isa = PBXGroup;
 			children = (
-				B68AFE5AD1E519699ADE9041 /* ExpoModulesProvider.swift */,
+				34CABF1741A113D3692A411C /* ExpoModulesProvider.swift */,
 			);
 			name = vroommobile;
 			sourceTree = "<group>";
@@ -99,8 +99,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				68E4D008EDC079CF7318481C /* Pods */,
-				CF54E8B17DDCDC5F5BA98CF5 /* ExpoModulesProviders */,
+				2E3411402F68E1A0AF90CB94 /* Pods */,
+				8448858D6EFF5D099F7B3EA7 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -115,6 +115,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		8448858D6EFF5D099F7B3EA7 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				63FB4BCC56EB784C4AA30F01 /* vroommobile */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
 			isa = PBXGroup;
 			children = (
@@ -122,14 +130,6 @@
 			);
 			name = Supporting;
 			path = vroommobile/Supporting;
-			sourceTree = "<group>";
-		};
-		CF54E8B17DDCDC5F5BA98CF5 /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				6B2AD932B899857F370A0CBC /* vroommobile */,
-			);
-			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -140,13 +140,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "vroommobile" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				B6900DD58D9931DF1A94B6AA /* [Expo] Configure project */,
+				4A1FEB1554CB136D2286B319 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				F69953C4B1528656B867CD0C /* [CP] Embed Pods Frameworks */,
+				5E71D8A100EA0EE0F8B89D20 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -167,8 +167,6 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1250;
-						DevelopmentTeam = "Y9LC8G72Z7";
-						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -198,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				6F9BF5B1FC9CE365AD59C2DE /* PrivacyInfo.xcprivacy in Resources */,
+				BEBCB4793F4C1169492914DC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -242,6 +240,43 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
+		4A1FEB1554CB136D2286B319 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-vroommobile/expo-configure-project.sh\"\n";
+		};
+		5E71D8A100EA0EE0F8B89D20 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-vroommobile/Pods-vroommobile-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-vroommobile/Pods-vroommobile-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -282,43 +317,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-vroommobile/Pods-vroommobile-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		B6900DD58D9931DF1A94B6AA /* [Expo] Configure project */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-vroommobile/expo-configure-project.sh\"\n";
-		};
-		F69953C4B1528656B867CD0C /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-vroommobile/Pods-vroommobile-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-vroommobile/Pods-vroommobile-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -327,7 +325,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				942BCD42DEBB71070DF1B1C1 /* ExpoModulesProvider.swift in Sources */,
+				A4A586D190394EAE075D3544 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,12 +334,13 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 19E0848AFE53E78139D9498F /* Pods-vroommobile.debug.xcconfig */;
+			baseConfigurationReference = E7BF5805C3D0F5E30DFEA27E /* Pods-vroommobile.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = vroommobile/vroommobile.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y9LC8G72Z7;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -367,20 +366,18 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-				DEVELOPMENT_TEAM = "Y9LC8G72Z7";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Debug;
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 20B3F94BB39D709426274E99 /* Pods-vroommobile.release.xcconfig */;
+			baseConfigurationReference = 4980644AE0449094EAE16DDD /* Pods-vroommobile.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = vroommobile/vroommobile.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y9LC8G72Z7;
 				INFOPLIST_FILE = vroommobile/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -400,9 +397,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-				DEVELOPMENT_TEAM = "Y9LC8G72Z7";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Release;
 		};

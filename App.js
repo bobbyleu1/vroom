@@ -25,9 +25,11 @@ import GroupsScreen from './screens/GroupsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
 import ForumsScreen from './screens/ForumsScreen';
 import ForumPostDetailScreen from './screens/ForumPostDetailScreen';
-import NotificationsScreen from './screens/NotificationsScreen'; // ✅ NEW IMPORT
+import NotificationsScreen from './screens/NotificationsScreen';
+import MessagesScreen from './screens/MessagesScreen';
+import NewMessageScreen from './screens/NewMessageScreen';
+import ChatScreen from './screens/ChatScreen';
 
-// Supabase
 import { supabase } from './utils/supabase';
 
 const Tab = createBottomTabNavigator();
@@ -123,6 +125,9 @@ export default function App() {
             <Stack.Screen name="Forums" component={ForumsScreen} />
             <Stack.Screen name="ForumPostDetail" component={ForumPostDetailScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="MessagesScreen" component={MessagesScreen} />
+            <Stack.Screen name="NewMessageScreen" component={NewMessageScreen} />
+            <Stack.Screen name="ChatScreen" component={ChatScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

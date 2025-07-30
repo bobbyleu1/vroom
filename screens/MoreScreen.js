@@ -36,6 +36,16 @@ const MoreScreen = ({ navigation }) => {
           <Text style={styles.buttonText}>Notifications</Text>
           <Ionicons name="chevron-forward" size={24} color="#FFF" />
         </TouchableOpacity>
+
+        {/* 👇 NEW: Direct Messages button */}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('MessagesScreen')}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={30} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Direct Messages</Text>
+          <Ionicons name="chevron-forward" size={24} color="#FFF" />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

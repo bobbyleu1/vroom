@@ -1,95 +1,158 @@
-// screens/LoginScreen.js
-
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
-import { supabase } from '../utils/supabase'; // Important: Adjust path if your utils folder is elsewhere
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+} from 'react-native';
+import { Ionicons, Feather } from '@expo/vector-icons';
+import { supabase } from '../utils/supabase';
 
-function LoginScreen() {
+export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleAuth = async (isSignUp) => {
+  const handleLogin = async () => {
     setLoading(true);
     try {
-      const { error } = isSignUp
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Using Alert for feedback, consider a more native UI component in a real app
-      Alert.alert('Success', isSignUp ? 'Check your email to confirm signup' : 'Logged in');
+      Alert.alert('Success', 'You are logged in!');
     } catch (error) {
-      // Using Alert for error display
-      Alert.alert('Error', error.message);
+      Alert.alert('Login Failed', error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Vroom 🚗</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#888"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        onChangeText={setEmail}
-        value={email}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#888"
-        secureTextEntry
-        onChangeText={setPassword}
-        value={password}
-      />
-      <TouchableOpacity style={styles.button} onPress={() => handleAuth(false)} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? 'Loading...' : 'Log In'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={() => handleAuth(true)} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? 'Loading...' : 'Sign Up'}</Text>
-      </TouchableOpacity>
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Text style={styles.logo}>Vroom <Ionicons name="car-sport" size={28} color="#00BFFF" /></Text>
+
+        <View style={styles.inputContainer}>
+          <Feather name="mail" size={20} color="#888" style={styles.icon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#888"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Feather name="lock" size={20} color="#888" style={styles.icon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#888"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+        </View>
+
+        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
+          <Text style={styles.loginText}>{loading ? 'Loading...' : 'Log In'}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.divider} />
+          <Text style={styles.orText}>Or</Text>
+          <View style={styles.divider} />
+        </View>
+
+        <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+          <Text style={styles.signUpText}>Sign Up</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.footerText}>Powered by <Text style={{ color: '#00BFFF' }}>Vroom</Text></Text>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-// Styles specific to the LoginScreen
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#111',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20
+    paddingHorizontal: 28,
   },
-  title: {
-    fontSize: 28,
+  logo: {
+    fontSize: 36,
+    fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 20
+    alignSelf: 'center',
+    marginBottom: 40,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  icon: {
+    marginRight: 8,
   },
   input: {
-    backgroundColor: '#222',
+    flex: 1,
+    paddingVertical: 14,
     color: '#fff',
-    width: '100%',
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 6
+    fontSize: 16,
   },
-  button: {
+  loginBtn: {
     backgroundColor: '#00BFFF',
-    padding: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 999,
+    alignItems: 'center',
     marginTop: 10,
-    width: '100%',
-    alignItems: 'center'
   },
-  buttonText: {
+  loginText: {
     color: '#fff',
-    fontSize: 16
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#222',
+  },
+  orText: {
+    marginHorizontal: 12,
+    color: '#888',
+  },
+  signUpText: {
+    alignSelf: 'center',
+    color: '#00BFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  footerText: {
+    marginTop: 40,
+    alignSelf: 'center',
+    color: '#666',
   },
 });
-
-export default LoginScreen;

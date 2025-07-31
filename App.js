@@ -13,7 +13,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons, Feather, Entypo } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 
-// Screen imports
 import UploadScreen from './screens/UploadScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -29,6 +28,8 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import NewMessageScreen from './screens/NewMessageScreen';
 import ChatScreen from './screens/ChatScreen';
+import UserProfileScreen from './screens/UserProfileScreen';
+import UserPostsFeedScreen from './screens/UserPostsFeedScreen';
 
 import { supabase } from './utils/supabase';
 
@@ -77,6 +78,7 @@ function MainApp() {
         },
       })}
     >
+      {/* ⚠️ Make sure there's NO text, whitespace, or logic here outside of <Screen />s */}
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Friends" component={FriendsScreen} />
       <Tab.Screen name="Upload" component={UploadScreen} />
@@ -128,6 +130,24 @@ export default function App() {
             <Stack.Screen name="MessagesScreen" component={MessagesScreen} />
             <Stack.Screen name="NewMessageScreen" component={NewMessageScreen} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
+            <Stack.Screen
+              name="UserProfile"
+              component={UserProfileScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Profile',
+                headerTintColor: '#fff',
+                headerStyle: { backgroundColor: '#000' },
+              }}
+            />
+            <Stack.Screen
+              name="UserPostsFeed"
+              component={UserPostsFeedScreen}
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

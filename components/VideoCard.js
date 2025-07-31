@@ -1,3 +1,5 @@
+// components/VideoCard.js
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -25,7 +27,7 @@ const { height, width } = Dimensions.get('window');
  *
  * @param {number|null|undefined} num The number to format
  * @returns {string}
- */
+*/
 const formatCount = (num) => {
   if (num === null || num === undefined) return '0';
   if (num >= 1_000_000) {
@@ -46,7 +48,7 @@ const formatCount = (num) => {
  * interactions such as double tapping to like and opening the comments
  * modal. Like and comment counts are kept in sync with Supabase in real
  * time via a channel subscription.
- */
+*/
 function VideoCard({ item, index, currentVideoIndex, navigation }) {
   const videoRef = useRef(null);
   const [heartScale] = useState(new Animated.Value(0));
@@ -271,6 +273,19 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
     Alert.alert('Share', 'This would open the share options for the post.');
   };
 
+  /**
+   * Handles navigating to the user's profile page when their avatar or username is pressed.
+   */
+  const handleProfilePress = () => {
+    if (navigation && item.author_id) {
+      // You'll need to have a 'UserProfile' screen registered in your navigator
+      navigation.navigate('UserProfile', { userId: item.author_id });
+    } else {
+      console.warn("Navigation prop or author_id missing, cannot navigate to profile.");
+      Alert.alert('Error', 'Could not open user profile.');
+    }
+  };
+
   return (
     <TouchableOpacity
       activeOpacity={1}
@@ -290,7 +305,7 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
       {/* Overlay for text and actions */}
       <View style={styles.overlayContainer}>
         {/* Left side: Username and Caption */}
-        <View style={styles.leftContent}>
+        <TouchableOpacity onPress={handleProfilePress} style={styles.leftContent}>
           {item.profiles?.username && (
             <Text style={styles.usernameText}>@{item.profiles.username}</Text>
           )}
@@ -305,7 +320,7 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
               {item.content}
             </Text>
           ) : null}
-        </View>
+        </TouchableOpacity>
         {/* Animated Heart Overlay */}
         <Animated.View
           style={[
@@ -319,9 +334,11 @@ function VideoCard({ item, index, currentVideoIndex, navigation }) {
           <AntDesign name="heart" size={100} color="white" />
         </Animated.View>
       </View>
-      {/* Avatar */}
+      {/* Avatar - Now wrapped in TouchableOpacity */}
       {item.profiles?.avatar_url && (
-        <Image source={{ uri: item.profiles.avatar_url }} style={styles.avatar} />
+        <TouchableOpacity onPress={handleProfilePress} style={styles.avatarContainer}>
+          <Image source={{ uri: item.profiles.avatar_url }} style={styles.avatar} />
+        </TouchableOpacity>
       )}
       {/* Action Bar */}
       <ActionBar
@@ -391,17 +408,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
   },
-  avatar: {
+  avatarContainer: {
     position: 'absolute',
     right: 12,
     top: height * 0.45,
+    zIndex: 1, // Ensure the TouchableOpacity is above other elements
+  },
+  avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
     borderWidth: 2,
     borderColor: '#00BFFF',
     backgroundColor: '#333',
-    zIndex: 1,
   },
   animatedHeart: {
     position: 'absolute',

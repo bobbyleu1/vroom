@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform, TextInput, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
+
+// Import the NativeAdCard component to render ads within the posts list
+import NativeAdCard from '../components/NativeAdCard';
 import { StatusBar } from 'expo-status-bar';
 
 // Import Supabase client
@@ -39,6 +42,32 @@ const ForumsScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [currentCommunity, setCurrentCommunity] = useState(initialCommunityName); // State to manage if we're viewing a specific community
+
+  // Frequency for inserting ads into the posts lists. After every N posts
+  // an advertisement will be displayed. Feel free to adjust this value
+  // to tune the ad density.
+  const ADS_FREQUENCY = 8;
+
+  /**
+   * Helper function to interleave advertisement markers into an array of
+   * posts. It returns a new array where every Nth element is an object
+   * with `isAd: true`. This approach keeps the original posts intact
+   * while adding placeholders that our render function will detect and
+   * replace with a NativeAdCard.
+   *
+   * @param {Array} arr - array of posts
+   * @returns {Array} augmented array containing posts and ad markers
+   */
+  const insertAdMarkers = (arr) => {
+    const result = [];
+    arr.forEach((item, index) => {
+      result.push(item);
+      if ((index + 1) % ADS_FREQUENCY === 0) {
+        result.push({ isAd: true });
+      }
+    });
+    return result;
+  };
 
   // Function to fetch posts for a specific community
   const fetchPostsForCommunity = useCallback(async (communityNameToFetch) => {
@@ -217,45 +246,55 @@ const ForumsScreen = ({ navigation, route }) => {
 
 
   // Render item for Hot/Trending Posts (and search results posts)
-  const renderHotTrendingPostItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.postCard}
-      onPress={() => navigation.navigate('ForumPostDetail', { postId: item.id })}
-    >
-      <View style={styles.voteContainer}>
-        <TouchableOpacity onPress={() => console.log('Upvote')}>
-          <AntDesign name="caretup" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <Text style={styles.voteCount}>{item.upvotes}</Text>
-        <TouchableOpacity onPress={() => console.log('Downvote')}>
-          <AntDesign name="caretdown" size={24} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.postContent}>
-        <View style={styles.postMetaTop}>
-          <Text style={styles.postCommunity}>{item.community_name}</Text>
-          <Text style={styles.postAuthor}>Posted by u/{item.author_username}</Text>
-          <Text style={styles.postTime}>{item.created_at_formatted}</Text>
-        </View>
-        <Text style={styles.postTitle}>{item.title}</Text>
-        <Text style={styles.postSnippet}>{item.content_snippet}</Text>
-        <View style={styles.postActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="chatbubble-outline" size={18} color="#B0B0B0" />
-            <Text style={styles.actionText}>{item.comment_count} comments</Text>
+  const renderHotTrendingPostItem = ({ item }) => {
+    // If this is an ad marker, render the native ad card. The component
+    // itself determines the appropriate unit ID based on platform and
+    // handles loading internally. It blends seamlessly with the post
+    // cards due to similar styling.
+    if (item.isAd) {
+      return <NativeAdCard />;
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.postCard}
+        onPress={() => navigation.navigate('ForumPostDetail', { postId: item.id })}
+      >
+        <View style={styles.voteContainer}>
+          <TouchableOpacity onPress={() => console.log('Upvote')}>
+            <AntDesign name="caretup" size={24} color="#FFF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Feather name="share" size={18} color="#B0B0B0" />
-            <Text style={styles.actionText}>Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Feather name="eye" size={18} color="#B0B0B0" />
-            <Text style={styles.actionText}>View</Text>
+          <Text style={styles.voteCount}>{item.upvotes}</Text>
+          <TouchableOpacity onPress={() => console.log('Downvote')}>
+            <AntDesign name="caretdown" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.postContent}>
+          <View style={styles.postMetaTop}>
+            <Text style={styles.postCommunity}>{item.community_name}</Text>
+            <Text style={styles.postAuthor}>Posted by u/{item.author_username}</Text>
+            <Text style={styles.postTime}>{item.created_at_formatted}</Text>
+          </View>
+          <Text style={styles.postTitle}>{item.title}</Text>
+          <Text style={styles.postSnippet}>{item.content_snippet}</Text>
+          <View style={styles.postActions}>
+            <TouchableOpacity style={styles.actionButton}>
+              <Ionicons name="chatbubble-outline" size={18} color="#B0B0B0" />
+              <Text style={styles.actionText}>{item.comment_count} comments</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <Feather name="share" size={18} color="#B0B0B0" />
+              <Text style={styles.actionText}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <Feather name="eye" size={18} color="#B0B0B0" />
+              <Text style={styles.actionText}>View</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   // Render item for My Communities (and search results communities)
   const renderMyCommunityItem = ({ item }) => (
@@ -317,9 +356,9 @@ const ForumsScreen = ({ navigation, route }) => {
               </View>
               {hotTrendingPosts.length > 0 ? (
                 <FlatList
-                  data={hotTrendingPosts}
+                  data={insertAdMarkers(hotTrendingPosts)}
                   renderItem={renderHotTrendingPostItem}
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item, index) => (item.isAd ? `ad-${index}` : item.id)}
                   contentContainerStyle={styles.postsListContainer}
                   scrollEnabled={false}
                 />
@@ -366,9 +405,9 @@ const ForumsScreen = ({ navigation, route }) => {
               <Text style={styles.searchResultTitle}>Post Results</Text>
               {searchResultsPosts.length > 0 ? (
                 <FlatList
-                  data={searchResultsPosts}
+                  data={insertAdMarkers(searchResultsPosts)}
                   renderItem={renderHotTrendingPostItem}
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item, index) => (item.isAd ? `ad-${index}` : item.id)}
                   contentContainerStyle={styles.listContainer}
                   scrollEnabled={false}
                 />
@@ -381,9 +420,9 @@ const ForumsScreen = ({ navigation, route }) => {
               <Text style={styles.communityPostsHeader}>Posts in v/{currentCommunity}</Text>
               {hotTrendingPosts.length > 0 ? ( // hotTrendingPosts now holds posts for the specific community
                 <FlatList
-                  data={hotTrendingPosts}
+                  data={insertAdMarkers(hotTrendingPosts)}
                   renderItem={renderHotTrendingPostItem}
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item, index) => (item.isAd ? `ad-${index}` : item.id)}
                   contentContainerStyle={styles.postsListContainer}
                   scrollEnabled={false}
                 />
@@ -483,8 +522,8 @@ const styles = StyleSheet.create({
   postCard: {
     flexDirection: 'row',
     backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    marginBottom: 10,
+    borderRadius: 14,
+    marginBottom: 15,
     shadowColor: '#00BFFF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,

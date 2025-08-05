@@ -13,6 +13,9 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+// Import the native ad card to display ads within the groups list
+import NativeAdCard from '../components/NativeAdCard';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../utils/supabase';
 import GroupFormModal from '../components/GroupFormModal';
@@ -27,6 +30,30 @@ function GroupsScreen() {
   const [activeTab, setActiveTab] = useState('Discover');
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+
+  // Frequency at which to insert ads into the groups list. After every
+  // N groups, an ad will be inserted. Adjust this value to tune
+  // monetisation density.
+  const ADS_FREQUENCY = 8;
+
+  /**
+   * Inserts ad marker objects into an array at a regular interval. These
+   * markers are detected in the render function and replaced with
+   * NativeAdCard components.
+   *
+   * @param {Array} arr - list of groups
+   * @returns {Array} array with ad markers interspersed
+   */
+  const insertAdMarkers = (arr) => {
+    const result = [];
+    arr.forEach((item, index) => {
+      result.push(item);
+      if ((index + 1) % ADS_FREQUENCY === 0) {
+        result.push({ isAd: true });
+      }
+    });
+    return result;
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -174,6 +201,10 @@ function GroupsScreen() {
   };
 
   const renderGroupCard = ({ item }) => {
+    // When encountering an ad marker, render the native ad card instead
+    if (item.isAd) {
+      return <NativeAdCard />;
+    }
     const isCreator = currentUserId === item.creator_id;
     return (
       <TouchableOpacity
@@ -214,13 +245,17 @@ function GroupsScreen() {
               onPress={() => handleJoinLeaveGroup(item.id, item.isMember)}
               disabled={loading}
             >
-              <Text style={styles.joinLeaveButtonText}>
-                {loading ? <ActivityIndicator size="small" color="#000" /> : (item.isMember ? 'Leave Group' : 'Join Group')}
-              </Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#000" />
+              ) : (
+                <Text style={styles.joinLeaveButtonText}>
+                  {item.isMember ? 'Leave Group' : 'Join Group'}
+                </Text>
+              )}
             </TouchableOpacity>
           )}
           {isCreator && (
-             <Text style={styles.creatorTag}>You are the creator</Text>
+            <Text style={styles.creatorTag}>You are the creator</Text>
           )}
         </View>
       </TouchableOpacity>
@@ -275,9 +310,9 @@ function GroupsScreen() {
       </View>
 
       <FlatList
-        data={groups}
+        data={insertAdMarkers(groups)}
         renderItem={renderGroupCard}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => (item.isAd ? `ad-${index}` : item.id)}
         contentContainerStyle={styles.listContentContainer}
         style={styles.flatList}
         ListEmptyComponent={

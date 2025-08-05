@@ -19,6 +19,8 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../utils/supabase';
 import { Video } from 'expo-av'; // For video posts
 import PostFormModal from '../components/PostFormModal'; // <--- ADDED THIS IMPORT
+// Import the native ad card to display advertisements within the group posts
+import NativeAdCard from '../components/NativeAdCard';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +36,30 @@ function GroupDetailScreen() {
   const [isMember, setIsMember] = useState(false);
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Frequency for inserting ads into group posts. An ad appears after
+  // every ADS_FREQUENCY posts. Adjust this value to modify ad density.
+  const ADS_FREQUENCY = 8;
+
+  /**
+   * Inserts ad marker objects into the list of group posts at a
+   * specified interval. These markers are replaced with native ads
+   * during rendering. Using a separate helper function keeps the main
+   * logic clean and makes it easy to modify the frequency globally.
+   *
+   * @param {Array} arr - array of group posts
+   * @returns {Array} array with ad markers inserted
+   */
+  const insertAdMarkers = (arr) => {
+    const result = [];
+    arr.forEach((item, index) => {
+      result.push(item);
+      if ((index + 1) % ADS_FREQUENCY === 0) {
+        result.push({ isAd: true });
+      }
+    });
+    return result;
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -134,6 +160,10 @@ function GroupDetailScreen() {
   };
 
   const renderPostCard = ({ item }) => {
+    // When encountering an ad marker, render the native ad card instead of a post
+    if (item.isAd) {
+      return <NativeAdCard />;
+    }
     const postDate = new Date(item.created_at).toLocaleDateString();
     return (
       <View style={styles.postCard}>
@@ -292,9 +322,9 @@ function GroupDetailScreen() {
 
       {/* Main content (Group Info + Posts) - Scrollable */}
       <FlatList
-        data={groupPosts}
+        data={insertAdMarkers(groupPosts)}
         renderItem={renderPostCard}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => (item.isAd ? `ad-${index}` : item.id)}
         contentContainerStyle={styles.postsListContent}
         ListHeaderComponent={GroupInfoBanner}
         ListEmptyComponent={
@@ -447,10 +477,17 @@ const styles = StyleSheet.create({
   },
   postCard: {
     backgroundColor: '#1C1C1E',
-    borderRadius: 10,
+    borderRadius: 12,
     marginHorizontal: 15,
-    marginBottom: 15,
+    marginBottom: 20,
     padding: 15,
+    borderWidth: 1,
+    borderColor: '#00BFFF',
+    shadowColor: '#00BFFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3.84,
+    elevation: 3,
   },
   postHeader: {
     flexDirection: 'row',

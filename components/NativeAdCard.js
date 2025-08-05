@@ -1,12 +1,13 @@
-// NativeAdCard component renders a native AdMob ad in a style similar to the
-// vertical video cards used throughout the Vroom feed. It loads a native
-// advertisement using the `react-native-google-mobile-ads` library and
-// displays the ad's media, headline and call‑to‑action. The entire card
-// occupies the full height of the device to blend seamlessly with video
-// content.
+// NativeAdCard renders a small native AdMob advertisement that blends
+// seamlessly with other cards in the forums and groups feeds. The card
+// resembles a typical post: it has a dark background, a border, and
+// rounded corners consistent with the rest of the Vroom UI. The ad
+// includes media (image or video) at the top, a headline, an optional
+// call‑to‑action button, and a small "Sponsored" label to clearly
+// indicate that the content is promotional.
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, Dimensions } from 'react-native';
 import {
   NativeAd,
   NativeAdView,
@@ -15,24 +16,27 @@ import {
   NativeAssetType,
 } from 'react-native-google-mobile-ads';
 
-// Grab device dimensions to size the ad like a video card
-const { height } = Dimensions.get('window');
+// Define the AdMob unit IDs for each platform. These are provided by the
+// user and must correspond to native ad units configured in the AdMob
+// console. The same IDs are reused from the feed implementation to
+// ensure monetisation consistency across the app.
+const AD_UNIT_ID_IOS = 'ca-app-pub-6842873031676463/4717662480';
+const AD_UNIT_ID_ANDROID = 'ca-app-pub-6842873031676463/3404580816';
 
-// Ad unit IDs supplied by the user for each platform
-const NATIVE_AD_UNIT_ID_IOS = 'ca-app-pub-6842873031676463/4717662480';
-const NATIVE_AD_UNIT_ID_ANDROID = 'ca-app-pub-6842873031676463/3404580816';
-
-function NativeAdCard() {
+/**
+ * A reusable component that displays a single native ad. It loads the
+ * advertisement when mounted and destroys it on unmount to free
+ * resources. While the ad is loading, an empty container is rendered
+ * to avoid any layout shift.
+ */
+export default function NativeAdCard() {
   const [nativeAd, setNativeAd] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
-    const loadAd = async () => {
+    async function loadAd() {
       try {
-        // Choose the appropriate ad unit ID based on platform
-        const adUnitId = Platform.OS === 'ios'
-          ? NATIVE_AD_UNIT_ID_IOS
-          : NATIVE_AD_UNIT_ID_ANDROID;
+        const adUnitId = Platform.OS === 'ios' ? AD_UNIT_ID_IOS : AD_UNIT_ID_ANDROID;
         const ad = await NativeAd.createForAdRequest(adUnitId);
         if (isMounted) {
           setNativeAd(ad);
@@ -40,99 +44,111 @@ function NativeAdCard() {
       } catch (err) {
         console.warn('Failed to load native ad:', err);
       }
-    };
+    }
     loadAd();
 
     return () => {
       isMounted = false;
-      // Always destroy the ad when the component unmounts
       if (nativeAd) {
         nativeAd.destroy();
       }
     };
   }, []);
 
-  // While the ad is loading, render a blank container to avoid layout jumps
+  // Render a placeholder while the ad is loading to maintain consistent
+  // spacing in the list.
   if (!nativeAd) {
-    return <View style={[styles.container, styles.loadingContainer]} />;
+    return <View style={styles.placeholder} />;
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.cardContainer}>
       <NativeAdView nativeAd={nativeAd} style={styles.adView}>
-        {/* Display the ad media (image or video). It automatically fills the card */}
+        {/* Media content displayed at the top of the card. The media will
+            automatically adjust its aspect ratio and fill the width of
+            the card. */}
         <NativeMediaView style={styles.media} />
-        {/* Overlay containing sponsored label, headline and call to action */}
-        <View style={styles.overlay} pointerEvents="box-none">
-          <Text style={styles.sponsoredLabel}>Sponsored</Text>
+
+        {/* Content section: headline and call‑to‑action button. These
+            elements are taken from the ad itself and displayed in
+            typical Vroom styling. */}
+        <View style={styles.contentSection}>
           <NativeAsset assetType={NativeAssetType.HEADLINE}>
-            <Text style={styles.headline} numberOfLines={1}>
+            <Text style={styles.headline} numberOfLines={2}>
               {nativeAd.headline}
             </Text>
           </NativeAsset>
           {nativeAd.callToActionText ? (
             <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
-              <View style={styles.ctaButton}>
+              <TouchableOpacity style={styles.ctaButton}>
                 <Text style={styles.ctaText}>{nativeAd.callToActionText}</Text>
-              </View>
+              </TouchableOpacity>
             </NativeAsset>
           ) : null}
         </View>
+
+        {/* Overlay the "Sponsored" label in the top right corner of the
+            card. This clearly marks the content as an advertisement. */}
+        <Text style={styles.sponsoredLabel}>Sponsored</Text>
       </NativeAdView>
     </View>
   );
 }
 
+const CARD_WIDTH = Dimensions.get('window').width - 30; // account for padding
+const MEDIA_HEIGHT = 150; // height of the media section
+
 const styles = StyleSheet.create({
-  // Card container matches the size of a video card
-  container: {
-    height,
+  cardContainer: {
     width: '100%',
-    backgroundColor: '#000',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#00BFFF',
+    overflow: 'hidden',
   },
   adView: {
     flex: 1,
   },
   media: {
-    flex: 1,
     width: '100%',
+    height: MEDIA_HEIGHT,
+    backgroundColor: '#000',
   },
-  overlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  sponsoredLabel: {
-    color: '#bbb',
-    fontSize: 12,
-    marginBottom: 4,
+  contentSection: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
   },
   headline: {
-    color: '#fff',
+    color: '#E0E0E0',
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
   },
   ctaButton: {
-    backgroundColor: '#00BFFF',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
     alignSelf: 'flex-start',
+    backgroundColor: '#00BFFF',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
   ctaText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#000',
     fontSize: 14,
+    fontWeight: 'bold',
   },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  sponsoredLabel: {
+    position: 'absolute',
+    top: 8,
+    right: 10,
+    color: '#888',
+    fontSize: 12,
+  },
+  placeholder: {
+    height: MEDIA_HEIGHT + 60, // approximate space while loading
+    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
+    marginBottom: 15,
   },
 });
-
-export default NativeAdCard;

@@ -1,17 +1,16 @@
-// FeedScreen renders the main video feed and seamlessly inserts a native
-// advertisement after every tenth video. Ads are displayed using a custom
-// NativeAdCard component which makes the ad appear similar to normal content.
+// screens/FeedScreen.js
+
+// The FeedScreen renders the main video feed and seamlessly inserts
+// full‑screen native advertisements after every tenth video. These ads
+// use the NativeAdCardFeed component, which matches the look and feel
+// of a typical video post while clearly marking the content as
+// sponsored. Videos autoplay as the user scrolls through the feed.
 
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  FlatList,
-  ActivityIndicator,
-  Dimensions,
-  StyleSheet,
-} from 'react-native';
+import { FlatList, ActivityIndicator, Dimensions, StyleSheet } from 'react-native';
 import { supabase } from '../utils/supabase';
 import VideoCard from '../components/VideoCard';
-import NativeAdCard from '../components/NativeAdCard';
+import NativeAdCardFeed from '../components/NativeAdCardFeed';
 import { useNavigation } from '@react-navigation/native';
 
 // Determine the snap interval for paging based on the full window height
@@ -49,7 +48,7 @@ function FeedScreen() {
 
       if (!error) {
         const videos = data || [];
-        // Insert a placeholder ad object after every ADS_FREQUENCY videos
+        // Insert a full‑screen ad after every ADS_FREQUENCY videos
         const itemsWithAds = [];
         let adCount = 0;
         videos.forEach((video, idx) => {
@@ -98,7 +97,7 @@ function FeedScreen() {
       viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
       renderItem={({ item, index }) =>
         item.type === 'ad' ? (
-          <NativeAdCard />
+          <NativeAdCardFeed />
         ) : (
           <VideoCard
             item={item}

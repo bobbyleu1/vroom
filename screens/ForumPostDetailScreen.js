@@ -72,35 +72,62 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
         created_at_formatted: formatTimeAgo(postData.created_at),
       });
 
-      // Fetch comments for the post
+      // Fetch comments for the post. Explicitly select only the fields we need and
+      // include the associated profile for author username. We also select
+      // like_count so we can display the number of likes on each comment.
       const { data: commentsData, error: commentsError } = await supabase
         .from('forum_comments')
-        .select('*, profiles(username)') // Fetch author username for comments
+        .select(`id, post_id, author_id, content, created_at, parent_comment_id, like_count, profiles(username)`) // join author username via foreign key relation
         .eq('post_id', postId)
-        .order('created_at', { ascending: true }); // Order comments by creation time
+        .order('created_at', { ascending: true });
 
       if (commentsError) {
-        console.error('Error fetching comments:', commentsError.message); // Log full error message
-        console.error('Comments Error Details:', commentsError); // Log the entire error object for more context
+        console.error('Error fetching comments:', commentsError.message);
+        console.error('Comments Error Details:', commentsError);
         Alert.alert('Error', 'Could not load comments. Please try again.');
         setComments([]);
         return;
       }
 
-      console.log('Fetched comments data:', commentsData); // Log the actual fetched data
-
-      // Structure comments for nested display (if parent_comment_id is used)
-      // For now, we'll display them linearly, but the structure is ready for nesting.
-      const structuredComments = commentsData
-        .map(comment => ({
-          ...comment,
+      // Build a threaded structure of comments. We first map the returned
+      // comments into a lookup table keyed by comment ID, then build
+      // parent/child relationships based on parent_comment_id. Finally we
+      // sort top‑level comments and their replies chronologically.
+      const commentsMap = new Map();
+      const rootComments = [];
+      commentsData.forEach((comment) => {
+        const formatted = {
+          id: comment.id,
+          post_id: comment.post_id,
+          author_id: comment.author_id,
           author_username: comment.profiles?.username || 'Anonymous',
+          content: comment.content,
+          created_at: comment.created_at,
           created_at_formatted: formatTimeAgo(comment.created_at),
-          // Add a 'replies' array if you implement nested replies later
-          // For now, all comments are treated as top-level for display
-        }));
-
-      setComments(structuredComments);
+          parent_comment_id: comment.parent_comment_id,
+          like_count: comment.like_count || 0,
+          replies: [],
+        };
+        commentsMap.set(formatted.id, formatted);
+        if (formatted.parent_comment_id === null) {
+          rootComments.push(formatted);
+        }
+      });
+      commentsData.forEach((comment) => {
+        if (comment.parent_comment_id !== null) {
+          const parent = commentsMap.get(comment.parent_comment_id);
+          const child = commentsMap.get(comment.id);
+          if (parent && child) {
+            parent.replies.push(child);
+          }
+        }
+      });
+      // Sort root comments and replies by creation time
+      rootComments.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      rootComments.forEach((comment) => {
+        comment.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      });
+      setComments(rootComments);
 
     } catch (error) {
       console.error('Error in fetchPostAndComments (catch block):', error.message);
@@ -196,9 +223,12 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
           ...postedComment,
           author_username: profileData?.username || 'Anonymous',
           created_at_formatted: formatTimeAgo(postedComment.created_at),
+          like_count: postedComment.like_count || 0,
           replies: [], // Initialize replies array
         };
-        setComments(prevComments => [newCommentObj, ...prevComments]); // Add new comment to the top
+        // Insert the new comment at the beginning of the root comments list. We do
+        // not resort the list here to retain the latest comment at the top.
+        setComments(prevComments => [newCommentObj, ...prevComments]);
         setNewComment(''); // Clear input field
         // Optionally, update post comment count here if not handled by a database trigger
         // For now, assuming database trigger handles forum_posts.comment_count
@@ -221,19 +251,20 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
       <View style={styles.commentActions}>
         <TouchableOpacity style={styles.commentActionButton}>
           <AntDesign name="like2" size={16} color="#B0B0B0" />
-          <Text style={styles.commentActionText}>{item.likes}</Text>
+          <Text style={styles.commentActionText}>{item.like_count}</Text>
         </TouchableOpacity>
-        {/* Reply button - currently only supports top-level comments */}
         <TouchableOpacity style={styles.commentActionButton}>
           <Text style={styles.commentActionText}>Reply</Text>
         </TouchableOpacity>
       </View>
-      {/* Nested replies would be rendered here recursively if implemented */}
-      {/* {item.replies && item.replies.map(reply => (
-        <View key={reply.id}>
-          {renderComment({ item: reply, level: level + 1 })}
-        </View>
-      ))} */}
+      {/* Render nested replies recursively */}
+      {item.replies && item.replies.length > 0 && (
+        item.replies.map((reply) => (
+          <View key={reply.id}>
+            {renderComment({ item: reply, level: level + 1 })}
+          </View>
+        ))
+      )}
     </View>
   );
 

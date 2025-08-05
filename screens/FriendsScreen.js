@@ -1,7 +1,9 @@
-// FriendsScreen renders the videos from users that the current user follows or
-// is followed by, inserting a native advertisement after every tenth video.
-// If no videos are available, a friendly message is displayed instead of the
-// feed.
+// screens/FriendsScreen.js
+
+// FriendsScreen renders the videos from users that the current user
+// follows or is followed by, inserting a full‑screen native
+// advertisement after every tenth video. If no videos are available,
+// a friendly message is displayed instead of the feed.
 
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -14,9 +16,12 @@ import {
 } from 'react-native';
 import { supabase } from '../utils/supabase';
 import VideoCard from '../components/VideoCard';
-import NativeAdCard from '../components/NativeAdCard';
+import NativeAdCardFeed from '../components/NativeAdCardFeed';
 
+// Determine the snap interval for paging based on the full window height
 const { height } = Dimensions.get('window');
+
+// Number of video items between ads
 const ADS_FREQUENCY = 10;
 
 function FriendsScreen() {
@@ -80,7 +85,7 @@ function FriendsScreen() {
       }
       if (!error) {
         const videos = data || [];
-        // Insert ads into the list of videos
+        // Insert a full‑screen ad after every ADS_FREQUENCY videos
         const itemsWithAds = [];
         let adCount = 0;
         videos.forEach((video, idx) => {
@@ -142,7 +147,7 @@ function FriendsScreen() {
       viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
       renderItem={({ item, index }) =>
         item.type === 'ad' ? (
-          <NativeAdCard />
+          <NativeAdCardFeed />
         ) : (
           <VideoCard
             item={item}

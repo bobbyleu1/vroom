@@ -49,6 +49,13 @@
           "cameraPermission": "The app needs access to your camera to take photos and videos.",
           "microphonePermission": "The app needs access to your microphone to record videos."
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-6842873031676463~4241636873",
+          "iosAppId": "ca-app-pub-6842873031676463~2738867414"
+        }
       ]
     ],
     "extra": {

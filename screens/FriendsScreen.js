@@ -1,71 +1,63 @@
-// screens/FriendsScreen.js
+// FriendsScreen renders the videos from users that the current user follows or
+// is followed by, inserting a native advertisement after every tenth video.
+// If no videos are available, a friendly message is displayed instead of the
+// feed.
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { FlatList, ActivityIndicator, Dimensions, StyleSheet, View, Text } from 'react-native';
-import { supabase } from '../utils/supabase'; // Ensure this path is correct
-import VideoCard from '../components/VideoCard'; // Ensure this path is correct
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  FlatList,
+  ActivityIndicator,
+  Dimensions,
+  StyleSheet,
+  View,
+  Text,
+} from 'react-native';
+import { supabase } from '../utils/supabase';
+import VideoCard from '../components/VideoCard';
+import NativeAdCard from '../components/NativeAdCard';
 
 const { height } = Dimensions.get('window');
+const ADS_FREQUENCY = 10;
 
 function FriendsScreen() {
-  const [videos, setVideos] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
   useEffect(() => {
     const fetchFriendsVideos = async () => {
       setLoading(true);
-      let friendOrMutualIds = []; // This will hold the IDs of users whose posts we want to show
-
-      // --- START: YOUR CUSTOM SUPABASE LOGIC TO FETCH FRIEND/MUTUAL IDs ---
-      // This is the section you will replace with the precise Supabase query or RPC call
-      // that your "Lovable AI" provides for fetching posts from direct follows/mutuals.
-      //
-      // For now, as a temporary placeholder, this will fetch ALL videos (like FeedScreen).
-      // You will replace this entire 'try...catch' block with the actual logic once you get it.
-
+      let friendOrMutualIds = [];
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // Retrieve the currently authenticated user
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (user) {
-          // Fetch users the current user is FOLLOWING
+          // Users the current user is following
           const { data: followingData, error: followingError } = await supabase
             .from('user_follows')
             .select('following_id')
             .eq('follower_id', user.id);
-
           if (followingError) throw followingError;
-
-          const followedUsers = followingData ? followingData.map(f => f.following_id) : [];
-
-          // Fetch users who are FOLLOWING the current user
+          const followedUsers = followingData ? followingData.map((f) => f.following_id) : [];
+          // Users who follow the current user
           const { data: followersData, error: followersError } = await supabase
             .from('user_follows')
             .select('follower_id')
             .eq('following_id', user.id);
-
           if (followersError) throw followersError;
-
-          const mutualFollowers = followersData ? followersData.map(f => f.follower_id) : [];
-
-          // Combine both lists and ensure uniqueness
+          const mutualFollowers = followersData ? followersData.map((f) => f.follower_id) : [];
           friendOrMutualIds = [...new Set([...followedUsers, ...mutualFollowers])];
-
-          // If you want to include the current user's own posts on their friends feed:
-          // friendOrMutualIds.push(user.id);
-          // friendOrMutualIds = [...new Set(friendOrMutualIds)]; // Ensure uniqueness after adding self
-
         }
       } catch (error) {
-        console.error("Error fetching friend/mutual IDs (placeholder logic):", error.message);
+        console.error('Error fetching friend/mutual IDs:', error.message);
         setLoading(false);
         return;
       }
-      // --- END: YOUR CUSTOM SUPABASE LOGIC TO FETCH FRIEND/MUTUAL IDs ---
-
-
-      // Now fetch posts only from those friend/mutual IDs
-      let { data, error } = { data: [], error: null }; // Initialize data and error
-
+      let data = [];
+      let error = null;
+      // Fetch only if there are friend or mutual IDs
       if (friendOrMutualIds.length > 0) {
         ({ data, error } = await supabase
           .from('posts')
@@ -83,16 +75,24 @@ function FriendsScreen() {
             )
           `)
           .eq('file_type', 'video')
-          .in('author_id', friendOrMutualIds) // Filter posts by the determined friend/mutual IDs
+          .in('author_id', friendOrMutualIds)
           .order('created_at', { ascending: false }));
-      } else {
-        console.log("No friend/mutual IDs found or user not logged in. Friends feed will be empty.");
       }
-
       if (!error) {
-        setVideos(data || []);
+        const videos = data || [];
+        // Insert ads into the list of videos
+        const itemsWithAds = [];
+        let adCount = 0;
+        videos.forEach((video, idx) => {
+          if (idx > 0 && idx % ADS_FREQUENCY === 0) {
+            adCount += 1;
+            itemsWithAds.push({ type: 'ad', id: `ad-${adCount}` });
+          }
+          itemsWithAds.push({ type: 'video', ...video });
+        });
+        setItems(itemsWithAds);
       } else {
-        console.error("Error fetching friends' videos (final fetch):", error.message);
+        console.error("Error fetching friends' videos:", error.message);
       }
       setLoading(false);
     };
@@ -106,38 +106,51 @@ function FriendsScreen() {
   }, []);
 
   if (loading) {
-    return <ActivityIndicator size="large" color="#00BFFF" style={styles.loadingIndicator} />;
+    return (
+      <ActivityIndicator
+        size="large"
+        color="#00BFFF"
+        style={styles.loadingIndicator}
+      />
+    );
   }
 
-  // Display a message if no friends' videos are found
-  if (videos.length === 0 && !loading) {
+  // Determine if there are any video items in the list
+  const hasVideos = items.some((item) => item.type === 'video');
+  if (!hasVideos) {
     return (
       <View style={styles.emptyFeedContainer}>
         <Text style={styles.emptyFeedText}>No videos from your friends yet!</Text>
-        <Text style={styles.emptyFeedSubText}>Start following people, or get them to follow you back, to see their posts here.</Text>
+        <Text style={styles.emptyFeedSubText}>
+          Start following people or get them to follow you back to see their posts here.
+        </Text>
       </View>
     );
   }
 
   return (
     <FlatList
-      data={videos}
-      keyExtractor={item => item.id}
+      data={items}
+      keyExtractor={(item, index) =>
+        item.type === 'ad' ? item.id : item.id?.toString() ?? index.toString()
+      }
       pagingEnabled
       snapToInterval={height}
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
       onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={{
-        itemVisiblePercentThreshold: 80
-      }}
-      renderItem={({ item, index }) => (
-        <VideoCard
-          item={item}
-          index={index}
-          currentVideoIndex={currentVideoIndex}
-        />
-      )}
+      viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
+      renderItem={({ item, index }) =>
+        item.type === 'ad' ? (
+          <NativeAdCard />
+        ) : (
+          <VideoCard
+            item={item}
+            index={index}
+            currentVideoIndex={currentVideoIndex}
+          />
+        )
+      }
     />
   );
 }

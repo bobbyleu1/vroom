@@ -1,16 +1,28 @@
-// screens/FeedScreen.js
+// FeedScreen renders the main video feed and seamlessly inserts a native
+// advertisement after every tenth video. Ads are displayed using a custom
+// NativeAdCard component which makes the ad appear similar to normal content.
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { FlatList, ActivityIndicator, Dimensions, StyleSheet } from 'react-native';
-import { supabase } from '../utils/supabase'; // Ensure this path is correct
-import VideoCard from '../components/VideoCard'; // Ensure this path is correct
-import { useNavigation } from '@react-navigation/native'; // Import useNavigation hook
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  FlatList,
+  ActivityIndicator,
+  Dimensions,
+  StyleSheet,
+} from 'react-native';
+import { supabase } from '../utils/supabase';
+import VideoCard from '../components/VideoCard';
+import NativeAdCard from '../components/NativeAdCard';
+import { useNavigation } from '@react-navigation/native';
 
+// Determine the snap interval for paging based on the full window height
 const { height } = Dimensions.get('window');
 
+// Number of video items between ads
+const ADS_FREQUENCY = 10;
+
 function FeedScreen() {
-  const navigation = useNavigation(); // Get the navigation object using the hook
-  const [videos, setVideos] = useState([]);
+  const navigation = useNavigation();
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
@@ -36,9 +48,20 @@ function FeedScreen() {
         .order('created_at', { ascending: false });
 
       if (!error) {
-        setVideos(data || []);
+        const videos = data || [];
+        // Insert a placeholder ad object after every ADS_FREQUENCY videos
+        const itemsWithAds = [];
+        let adCount = 0;
+        videos.forEach((video, idx) => {
+          if (idx > 0 && idx % ADS_FREQUENCY === 0) {
+            adCount += 1;
+            itemsWithAds.push({ type: 'ad', id: `ad-${adCount}` });
+          }
+          itemsWithAds.push({ type: 'video', ...video });
+        });
+        setItems(itemsWithAds);
       } else {
-        console.error("Error fetching feed videos:", error.message);
+        console.error('Error fetching feed videos:', error.message);
       }
       setLoading(false);
     };
@@ -52,29 +75,39 @@ function FeedScreen() {
   }, []);
 
   if (loading) {
-    return <ActivityIndicator size="large" color="#00BFFF" style={styles.loadingIndicator} />;
+    return (
+      <ActivityIndicator
+        size="large"
+        color="#00BFFF"
+        style={styles.loadingIndicator}
+      />
+    );
   }
 
   return (
     <FlatList
-      data={videos}
-      keyExtractor={item => item.id}
+      data={items}
+      keyExtractor={(item, index) =>
+        item.type === 'ad' ? item.id : item.id?.toString() ?? index.toString()
+      }
       pagingEnabled
       snapToInterval={height}
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
       onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={{
-        itemVisiblePercentThreshold: 80
-      }}
-      renderItem={({ item, index }) => (
-        <VideoCard
-          item={item}
-          index={index}
-          currentVideoIndex={currentVideoIndex}
-          navigation={navigation} // <--- Passing the navigation prop here
-        />
-      )}
+      viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
+      renderItem={({ item, index }) =>
+        item.type === 'ad' ? (
+          <NativeAdCard />
+        ) : (
+          <VideoCard
+            item={item}
+            index={index}
+            currentVideoIndex={currentVideoIndex}
+            navigation={navigation}
+          />
+        )
+      }
     />
   );
 }

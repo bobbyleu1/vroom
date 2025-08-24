@@ -44,6 +44,7 @@ function FeedScreen() {
   // Session management as per spec
   const [sessionId, setSessionId] = useState(() => uuidv4());
   const [sessionOpenedAt, setSessionOpenedAt] = useState(() => new Date().toISOString());
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const viewStartTime = useRef({});
   const refreshTimeoutRef = useRef(null);
   const flatListRef = useRef(null);
@@ -67,11 +68,23 @@ function FeedScreen() {
       let videos = [];
       if (usePersonalizedFeed) {
         // Increment refresh nonce for new lineup
-        const refreshNonce = personalizedFeed.incrementRefreshNonce();
-        console.log('FeedScreen: Pull-to-refresh with nonce:', refreshNonce);
+        const newRefreshNonce = refreshNonce + 1;
+        setRefreshNonce(newRefreshNonce);
         
-        // Get new feed with force_refresh and reset pagination
-        const feedResult = await getPersonalizedFeed(currentUserId, 50, null, { forceRefresh: true });
+        console.log('FeedScreen: Pull-to-refresh with nonce:', newRefreshNonce);
+        
+        // Get new feed with force_refresh=true and reset pagination
+        const feedResult = await getPersonalizedFeed(
+          currentUserId, 
+          12, // Standard page size
+          null, // Reset pagination (page_after = null)
+          { 
+            forceRefresh: true,
+            sessionId: sessionId,
+            sessionOpenedAt: sessionOpenedAt,
+            refreshNonce: newRefreshNonce
+          }
+        );
         videos = feedResult.posts.filter(post => 
           (post.mux_hls_url || post.media_url || post.mux_playback_id) // Support Mux and direct URLs
         ).map(post => ({
@@ -126,7 +139,7 @@ function FeedScreen() {
     refreshTimeoutRef.current = setTimeout(() => {
       setRefreshing(false);
     }, 1000);
-  }, [currentUserId, refreshing]);
+  }, [currentUserId, refreshing, refreshNonce, sessionId, sessionOpenedAt, usePersonalizedFeed]);
 
   useEffect(() => {
     const fetchUser = async () => {

@@ -24,7 +24,7 @@ const { height } = Dimensions.get('window');
 // Number of video items between ads
 const ADS_FREQUENCY = 10;
 
-function FriendsScreen() {
+function FriendsScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -32,12 +32,14 @@ function FriendsScreen() {
   useEffect(() => {
     const fetchFriendsVideos = async () => {
       setLoading(true);
+      console.log('FriendsScreen: Starting to fetch friends videos');
       let friendOrMutualIds = [];
       try {
         // Retrieve the currently authenticated user
         const {
           data: { user },
         } = await supabase.auth.getUser();
+        console.log('FriendsScreen: Got user:', user?.id);
         if (user) {
           // Users the current user is following
           const { data: followingData, error: followingError } = await supabase
@@ -54,6 +56,7 @@ function FriendsScreen() {
           if (followersError) throw followersError;
           const mutualFollowers = followersData ? followersData.map((f) => f.follower_id) : [];
           friendOrMutualIds = [...new Set([...followedUsers, ...mutualFollowers])];
+          console.log('FriendsScreen: Found friend/mutual IDs:', friendOrMutualIds.length);
         }
       } catch (error) {
         console.error('Error fetching friend/mutual IDs:', error.message);
@@ -69,12 +72,13 @@ function FriendsScreen() {
           .select(`
             id,
             media_url,
+            thumbnail_url,
             content,
             like_count,
             comment_count,
             view_count,
             author_id,
-            profiles (
+            profiles:author_id (
               username,
               avatar_url
             )
@@ -89,19 +93,26 @@ function FriendsScreen() {
         const itemsWithAds = [];
         let adCount = 0;
         videos.forEach((video, idx) => {
-          if (idx > 0 && idx % ADS_FREQUENCY === 0) {
+          itemsWithAds.push({ type: 'video', ...video });
+          // Add ad after every ADS_FREQUENCY items (not at index 0)
+          if ((idx + 1) % ADS_FREQUENCY === 0) {
             adCount += 1;
             itemsWithAds.push({ type: 'ad', id: `ad-${adCount}` });
           }
-          itemsWithAds.push({ type: 'video', ...video });
         });
+        console.log('FriendsScreen: Total videos:', videos.length, 'Items with ads:', itemsWithAds.length);
         setItems(itemsWithAds);
       } else {
         console.error("Error fetching friends' videos:", error.message);
       }
+      console.log('FriendsScreen: Fetch completed, setting loading to false');
       setLoading(false);
     };
-    fetchFriendsVideos();
+    
+    fetchFriendsVideos().catch((error) => {
+      console.error('FriendsScreen: Unhandled error:', error);
+      setLoading(false);
+    });
   }, []);
 
   const onViewableItemsChanged = useCallback(({ viewableItems }) => {
@@ -153,6 +164,7 @@ function FriendsScreen() {
             item={item}
             index={index}
             currentVideoIndex={currentVideoIndex}
+            navigation={navigation}
           />
         )
       }

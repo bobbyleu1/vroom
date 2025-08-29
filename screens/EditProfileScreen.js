@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, Image, Alert, StyleSheet, Scro
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { getProfileImageSource } from '../utils/profileHelpers';
 
 export default function EditProfileScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
@@ -51,40 +52,97 @@ export default function EditProfileScreen({ navigation }) {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session || !session.user) {
+        throw new Error('No user session found');
+      }
+      
       const userId = session.user.id;
       let avatarUrl = profile.avatar_url;
 
+      // Handle avatar upload if a new avatar was selected
       if (avatar && avatar !== profile.avatar_url) {
-        const response = await fetch(avatar);
-        const blob = await response.blob();
-        const fileExt = avatar.split('.').pop();
-        const fileName = `${userId}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, blob, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
-        avatarUrl = data.publicUrl;
+        console.log('Uploading new avatar:', avatar);
+        try {
+          const response = await fetch(avatar);
+          const blob = await response.blob();
+          const fileExt = avatar.split('.').pop() || 'jpg';
+          const fileName = `${userId}/${Date.now()}.${fileExt}`;
+          
+          const { error: uploadError, data: uploadData } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, blob, {
+              cacheControl: '3600',
+              upsert: true,
+              contentType: `image/${fileExt}`,
+            });
+            
+          if (uploadError) {
+            console.error('Avatar upload error:', uploadError);
+            throw new Error(`Failed to upload avatar: ${uploadError.message}`);
+          }
+          
+          const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          avatarUrl = `${data.publicUrl}?t=${Date.now()}`; // Add cache buster
+          console.log('Avatar uploaded successfully:', avatarUrl);
+        } catch (uploadError) {
+          console.error('Avatar upload failed:', uploadError);
+          throw new Error(`Failed to upload avatar: ${uploadError.message}`);
+        }
+      }
+
+      // Validate required fields
+      if (!username || username.trim().length === 0) {
+        throw new Error('Username is required');
       }
 
       const updates = {
-        username,
-        bio,
-        location,
-        website_link: website,
+        username: username.trim(),
+        bio: bio ? bio.trim() : null,
+        location: location ? location.trim() : null,
+        website_link: website ? website.trim() : null,
         avatar_url: avatarUrl,
-        updated_at: new Date(),
+        updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
-      if (error) throw error;
+      console.log('Updating profile with data:', updates);
+      console.log('User ID:', userId);
 
-      Alert.alert('Success', 'Profile updated!');
+      // First try to update the profile
+      const { error, data } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', userId)
+        .select();
+        
+      if (error) {
+        console.error('Profile update error:', error);
+        // If update fails, try to insert/upsert the profile
+        if (error.code === 'PGRST116' || error.message.includes('No rows found')) {
+          console.log('Profile not found, attempting to create...');
+          const { error: upsertError, data: upsertData } = await supabase
+            .from('profiles')
+            .upsert({ id: userId, ...updates })
+            .select();
+            
+          if (upsertError) {
+            console.error('Profile upsert error:', upsertError);
+            throw new Error(`Failed to create profile: ${upsertError.message}`);
+          }
+          console.log('Profile created successfully:', upsertData);
+        } else {
+          throw new Error(`Failed to update profile: ${error.message}`);
+        }
+      }
+      
+      console.log('Profile update successful:', data);
+      Alert.alert('Success', 'Profile updated successfully!');
       navigation.goBack();
+      
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Profile save error:', error);
+      Alert.alert('Error', error.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
@@ -100,11 +158,10 @@ export default function EditProfileScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* Profile Photo */}
-      {avatar ? (
-        <Image source={{ uri: avatar }} style={{ width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: '#00BFFF', marginTop: 60 }} />
-      ) : (
-        <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#333', marginTop: 60 }} />
-      )}
+      <Image 
+        source={avatar ? { uri: avatar } : getProfileImageSource(profile?.avatar_url)} 
+        style={{ width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: '#00BFFF', marginTop: 60 }} 
+      />
       <TouchableOpacity onPress={handleChoosePhoto} style={{ backgroundColor: '#00BFFF', padding: 8, borderRadius: 6, marginTop: 10 }}>
         <Text style={{ color: '#fff' }}>Choose Photo</Text>
       </TouchableOpacity>

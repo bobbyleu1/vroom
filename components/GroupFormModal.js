@@ -60,6 +60,10 @@ const GroupFormModal = ({ visible, onClose, onGroupCreated }) => {
       return;
     }
 
+    if (loading) {
+      return; // Prevent multiple simultaneous submissions
+    }
+
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -103,18 +107,8 @@ const GroupFormModal = ({ visible, onClose, onGroupCreated }) => {
         throw groupError;
       }
 
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: newGroup.id,
-          user_id: user.id,
-          joined_at: new Date().toISOString(),
-        });
-
-      if (memberError) {
-        await supabase.from('groups').delete().eq('id', newGroup.id);
-        throw memberError;
-      }
+      // Note: The database trigger 'on_group_created' automatically adds the creator 
+      // as a member with admin privileges, so no manual insertion is needed
 
       Alert.alert('Success', `Group "${groupName}" created successfully!`);
       // Reset form states
@@ -127,6 +121,8 @@ const GroupFormModal = ({ visible, onClose, onGroupCreated }) => {
       setProfileImageUri(null);
       setBannerImageUri(null);
 
+      // Close modal and trigger callback
+      onClose(); // Close the modal
       if (onGroupCreated) {
         onGroupCreated();
       }
@@ -281,7 +277,7 @@ const GroupFormModal = ({ visible, onClose, onGroupCreated }) => {
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.createButton}
+                  style={[styles.createButton, loading && styles.disabledButton]}
                   onPress={handleCreateGroup}
                   disabled={loading}
                 >
@@ -459,6 +455,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     marginLeft: 10,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   createButtonText: {
     color: '#000',

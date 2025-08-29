@@ -24,6 +24,7 @@ import {
   recordEngagement,
   personalizedFeed 
 } from '../utils/personalizedFeed';
+import { conditionallyDiversifyFeed } from '../utils/feedDiversification';
 
 // Determine the snap interval for paging based on the full window height
 const { height } = Dimensions.get('window');
@@ -85,9 +86,14 @@ function FeedScreen() {
             refreshNonce: newRefreshNonce
           }
         );
-        videos = feedResult.posts.filter(post => 
+        let filteredVideos = feedResult.posts.filter(post => 
           (post.mux_hls_url || post.media_url || post.mux_playback_id) // Support Mux and direct URLs
-        ).map(post => ({
+        );
+        
+        // Apply diversification to prevent consecutive posts from same author
+        filteredVideos = conditionallyDiversifyFeed(filteredVideos);
+        
+        videos = filteredVideos.map(post => ({
           ...post,
           id: post.id,
           author_id: post.author_id,
@@ -104,9 +110,12 @@ function FeedScreen() {
       } else {
         // Fallback to algorithmic feed
         const algorithmicVideos = await generateFeed(currentUserId, 50);
-        videos = algorithmicVideos.filter(post => 
+        let filteredAlgorithmicVideos = algorithmicVideos.filter(post => 
           post.file_type === 'video' && post.media_url
         );
+        
+        // Apply diversification to prevent consecutive posts from same author
+        videos = conditionallyDiversifyFeed(filteredAlgorithmicVideos);
         console.log('FeedScreen: Using algorithmic feed with', videos.length, 'videos');
       }
       
@@ -218,9 +227,14 @@ function FeedScreen() {
             }
           );
           
-          videos = feedResult.posts.filter(post => 
+          let filteredPersonalizedVideos = feedResult.posts.filter(post => 
             (post.mux_hls_url || post.media_url || post.mux_playback_id)
-          ).map(post => ({
+          );
+          
+          // Apply diversification to prevent consecutive posts from same author
+          const diversifiedVideos = conditionallyDiversifyFeed(filteredPersonalizedVideos);
+          
+          videos = diversifiedVideos.map(post => ({
             ...post,
             id: post.id,
             author_id: post.author_id,
@@ -240,9 +254,12 @@ function FeedScreen() {
           const algorithmicVideos = await generateFeed(currentUserId, 50);
           
           // Filter for videos only (algorithm might return other content types)
-          videos = algorithmicVideos.filter(post => 
+          let filteredAlgorithmicVideos = algorithmicVideos.filter(post => 
             post.file_type === 'video' && post.media_url
           );
+          
+          // Apply diversification to prevent consecutive posts from same author
+          videos = conditionallyDiversifyFeed(filteredAlgorithmicVideos);
           console.log('FeedScreen: Initial algorithmic feed with', videos.length, 'videos');
         }
         
@@ -391,8 +408,8 @@ function FeedScreen() {
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ 
-          itemVisiblePercentThreshold: 80,
-          minimumViewTime: 100
+          itemVisiblePercentThreshold: 50,
+          minimumViewTime: 50
         }}
         // Performance optimizations to prevent freezing
         removeClippedSubviews={true}
@@ -425,6 +442,10 @@ function FeedScreen() {
               navigation={navigation}
               onCommentsModalChange={setIsCommentsModalOpen}
               isAnyCommentsModalOpen={isCommentsModalOpen}
+              currentUserId={currentUserId}
+              onPostDeleted={(deletedPostId) => {
+                setItems(prevItems => prevItems.filter(prevItem => prevItem.id !== deletedPostId));
+              }}
             />
           )
         }

@@ -15,7 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../utils/supabase';
 // Optional: use expo-video-thumbnails to generate a thumbnail for the video
 // If you decide not to generate thumbnails, you can remove this import
-import * as VideoThumbnails from 'expo-video-thumbnails';
+import { uploadMedia } from '../utils/mediaUpload.js';
 
 /**
  * A screen that allows users to preview a selected video, add a caption,
@@ -38,58 +38,6 @@ const UploadPostScreen = () => {
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef(null);
 
-  /**
-   * Upload a file to Supabase storage.  The file path is prefixed with the
-   * authenticated user's ID and a timestamp to ensure uniqueness and
-   * organisation (e.g. "userId/1623456789012.mp4").
-   *
-   * @param {string} uri - The local URI of the video or thumbnail.
-   * @param {string} userId - The ID of the currently authenticated user.
-   * @returns {Promise<string>} - A promise that resolves to the public URL of the uploaded file.
-   */
-  const uploadFileToSupabase = async (uri, userId) => {
-    const fileExt = uri.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${userId}/${fileName}`;
-    // Fetch the file from the local URI and convert it into a Blob
-    const response = await fetch(uri);
-    const fileBlob = await response.blob();
-    // Upload the file to the posts bucket
-    const { error: uploadError } = await supabase.storage
-      .from('posts')
-      .upload(filePath, fileBlob, {
-        contentType: fileBlob.type,
-        upsert: true,
-      });
-    if (uploadError) {
-      throw uploadError;
-    }
-    // Retrieve the public URL of the uploaded file
-    const { data } = supabase.storage.from('posts').getPublicUrl(filePath);
-    return data.publicUrl;
-  };
-
-  /**
-   * Generate a thumbnail from the first second of a video and upload it
-   * to Supabase.  If thumbnail generation fails, this function falls
-   * back to returning undefined so that the caller can handle it.
-   *
-   * @param {string} uri - Local URI of the video.
-   * @param {string} userId - The ID of the currently authenticated user.
-   * @returns {Promise<string|undefined>} - Public URL of the uploaded thumbnail or undefined.
-   */
-  const generateAndUploadThumbnail = async (uri, userId) => {
-    try {
-      const { uri: thumbnailUri } = await VideoThumbnails.getThumbnailAsync(uri, {
-        time: 1000,
-      });
-      return await uploadFileToSupabase(thumbnailUri, userId);
-    } catch (err) {
-      // If thumbnail generation fails, log the error and continue without a thumbnail
-      console.warn('Thumbnail generation failed:', err);
-      return undefined;
-    }
-  };
 
   /**
    * Handle posting the video and caption.  This function performs the
@@ -114,19 +62,22 @@ const UploadPostScreen = () => {
         throw new Error('You must be logged in to post.');
       }
       const userId = authData.user.id;
-      // Upload the main video
-      const mediaUrl = await uploadFileToSupabase(videoUri, userId);
-      // Generate and upload a thumbnail for the video
-      const thumbnailUrl = await generateAndUploadThumbnail(videoUri, userId);
+      // Use shared upload utility to upload the video and get URLs
+      const { mediaUrl, thumbnailUrl } = await uploadMedia(videoUri, userId, 'video');
+      if (!mediaUrl) {
+        throw new Error('Failed to upload media.');
+      }
       // Insert the post record into the database
-      const { error: insertError } = await supabase.from('posts').insert({
-        author_id: userId,
-        file_type: 'video',
-        media_url: mediaUrl,
-        thumbnail_url: thumbnailUrl,
-        content: caption.trim(),
-        created_at: new Date().toISOString(),
-      });
+      const { error: insertError } = await supabase
+        .from('posts')
+        .insert({
+          author_id: userId,
+          file_type: 'video',
+          media_url: mediaUrl,
+          thumbnail_url: thumbnailUrl,
+          content: caption.trim(),
+          created_at: new Date().toISOString(),
+        });
       if (insertError) {
         throw insertError;
       }

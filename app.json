@@ -8,37 +8,64 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/AppIcon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bobbyleu1.vroommobile",
+      "icon": "./assets/AppIcon.PNG",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Vroom needs access to your camera to allow you to record and upload videos.",
         "NSPhotoLibraryUsageDescription": "Vroom needs access to your media library to upload saved videos or images.",
-        "NSMicrophoneUsageDescription": "Vroom needs access to your microphone to record audio for videos."
+        "NSMicrophoneUsageDescription": "Vroom needs access to your microphone to record audio for videos.",
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft", 
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      },
+      "entitlements": {
+        "aps-environment": "development"
       },
       "appleTeamId": "Y9LC8G72Z7"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/AppIcon.png",
+        "foregroundImage": "./assets/AppIcon.PNG",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.INTERNET",
+        "com.google.android.c2dm.permission.RECEIVE"
       ],
       "package": "com.bobbyleu1.vroommobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "scheme": "vroom",
+    "linking": {
+      "prefixes": [
+        "vroom://",
+        "https://vroom.app",
+        "https://*.vroom.app"
+      ]
     },
     "plugins": [
       "expo-camera",
@@ -51,10 +78,20 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#00BFFF",
+          "sounds": [],
+          "mode": "development"
+        }
+      ],
+      [
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-6842873031676463~4241636873",
-          "iosAppId": "ca-app-pub-6842873031676463~2738867414"
+          "iosAppId": "ca-app-pub-6842873031676463~2738867414",
+          "ios_app_id": "ca-app-pub-6842873031676463~2738867414"
         }
       ]
     ],

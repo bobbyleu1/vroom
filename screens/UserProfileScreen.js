@@ -17,6 +17,7 @@ import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Video } from 'expo-av'; // For video thumbnails
 import { notifyFollow } from '../utils/notificationHelpers';
+import { getProfileImageSource } from '../utils/profileHelpers';
 
 // Get the window dimensions for responsive styling
 // <<< THIS LINE MUST BE PRESENT RIGHT AFTER IMPORTS
@@ -47,91 +48,54 @@ function UserProfileScreen({ route, navigation }) {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followers, setFollowers] = useState(0); // New state for followers count
   const [following, setFollowing] = useState(0); // New state for following count
+  const [failedThumbnails, setFailedThumbnails] = useState(new Set());
+  const [failedVideos, setFailedVideos] = useState(new Set());
   const currentUserIdRef = useRef(null); // Ref to store current user ID
 
   useEffect(() => {
     const fetchUserData = async () => {
       setLoading(true);
+      
+      // Get current user for follow status
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-
       if (authError) {
         console.error("Auth error:", authError.message);
         Alert.alert("Error", "Failed to retrieve current user info.");
       }
       if (user) {
-        currentUserIdRef.current = user.id; // Store current user ID
+        currentUserIdRef.current = user.id;
       }
 
-      // Fetch profile data
+      // Use optimized single query to get all profile data
       const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('username, avatar_url, bio') // Select relevant profile fields
-        .eq('id', userId)
-        .single();
+        .rpc('get_user_profile_data', {
+          profile_user_id: userId,
+          current_user_id: user?.id || null
+        });
 
       if (profileError) {
-        console.error("Error fetching user profile:", profileError.message);
+        console.error("Error fetching profile data:", profileError.message);
         Alert.alert("Error", "Could not load user profile.");
-      } else {
-        setProfile(profileData);
-      }
-
-      // Fetch user's posts, including profiles data for VideoCard
-      const { data: postsData, error: postsError } = await supabase
-        .from('posts')
-        .select(`
-          id,
-          created_at,
-          media_url,
-          thumbnail_url,
-          content,
-          file_type,
-          like_count,
-          comment_count,
-          view_count,
-          author_id,
-          profiles!posts_author_id_fkey (
-            username,
-            avatar_url
-          )
-        `)
-        .eq('author_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (postsError) {
-        console.error("Error fetching user posts:", postsError.message);
-        console.error("Full error details:", postsError);
-        Alert.alert("Error", "Could not load user posts.");
-      } else {
-        console.log(`Fetched ${postsData?.length || 0} posts for user ${userId}`);
-        if (postsData && postsData.length > 0) {
-          console.log("Sample post:", postsData[0]);
-        }
-        setPosts(postsData || []);
-      }
-
-      // Fetch follower count for this user (userId)
-      const { count: followersCount, error: followersError } = await supabase
-        .from('user_follows')
-        .select('*', { count: 'exact', head: true })
-        .eq('following_id', userId);
-
-      if (followersError) {
-        console.error("Error fetching followers:", followersError.message);
-      } else {
-        setFollowers(followersCount || 0);
-      }
-
-      // Fetch following count for this user (userId)
-      const { count: followingCount, error: followingError } = await supabase
-        .from('user_follows')
-        .select('*', { count: 'exact', head: true })
-        .eq('follower_id', userId);
-
-      if (followingError) {
-        console.error("Error fetching following:", followingError.message);
-      } else {
-        setFollowing(followingCount || 0);
+      } else if (profileData && profileData.length > 0) {
+        const data = profileData[0];
+        
+        // Set profile data
+        setProfile({
+          username: data.username,
+          avatar_url: data.avatar_url,
+          bio: data.bio
+        });
+        
+        // Set follow counts and status
+        setFollowers(parseInt(data.followers_count) || 0);
+        setFollowing(parseInt(data.following_count) || 0);
+        setIsFollowing(data.is_following || false);
+        
+        // Set posts data
+        const posts = data.posts_data || [];
+        setPosts(posts);
+        
+        console.log(`Fast loaded profile with ${posts.length} posts for user ${userId}`);
       }
 
       setLoading(false);
@@ -141,28 +105,7 @@ function UserProfileScreen({ route, navigation }) {
   }, [userId]); // Re-run effect if userId changes (navigating to another user's profile)
 
 
-  useEffect(() => {
-    // Only check follow status if a currentUserId exists and it's not the user's own profile
-    const checkFollowingStatus = async () => {
-      if (currentUserIdRef.current && userId && currentUserIdRef.current !== userId) {
-        const { data, error } = await supabase
-          .from('user_follows')
-          .select('id')
-          .eq('follower_id', currentUserIdRef.current)
-          .eq('following_id', userId)
-          .single();
-
-        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found
-          console.error('Error checking follow status:', error.message);
-        } else {
-          setIsFollowing(!!data);
-        }
-      }
-    };
-    if (!loading) { // Only run this check once initial user data is loaded
-      checkFollowingStatus();
-    }
-  }, [currentUserIdRef.current, userId, loading]);
+  // Follow status is now handled in the main profile data query above
 
 
   const handleFollowToggle = async () => {
@@ -265,47 +208,79 @@ function UserProfileScreen({ route, navigation }) {
   };
 
   const renderPost = useCallback(({ item, index }) => {
-    // Determine if this is an image based on file extension
-    const isImage = item.media_url?.includes('.jpg') || item.media_url?.includes('.jpeg') || 
-                   item.media_url?.includes('.png') || item.media_url?.includes('.JPG') || 
-                   item.media_url?.includes('.JPEG') || item.media_url?.includes('.PNG');
+    // Determine the appropriate image source for the thumbnail
+    let imageSource;
+    let hasValidThumbnail = false;
     
-    // For images, use media_url directly
-    // For videos, prefer thumbnail_url, but provide a fallback placeholder if thumbnail is missing
-    let thumbnailUri;
-    if (isImage) {
-      thumbnailUri = item.media_url;
+    if (item.file_type === 'image') {
+      imageSource = { uri: item.media_url };
+      hasValidThumbnail = true;
+    } else if (item.file_type === 'video') {
+      // For videos, try thumbnail first, then video file, then placeholder
+      const hasThumbnail = item.thumbnail_url && item.thumbnail_url.trim() !== '';
+      const thumbnailFailed = failedThumbnails.has(item.id);
+      const videoFailed = failedVideos.has(item.id);
+      
+      if (hasThumbnail && !thumbnailFailed) {
+        imageSource = { uri: item.thumbnail_url };
+        hasValidThumbnail = true;
+      } else if (!videoFailed) {
+        imageSource = { uri: item.media_url };
+        hasValidThumbnail = false;
+      } else {
+        // Both thumbnail and video failed - use placeholder
+        imageSource = require('../assets/video-placeholder.png');
+        hasValidThumbnail = true;
+      }
     } else {
-      // For videos, only use thumbnail_url if it exists, otherwise use a placeholder
-      thumbnailUri = item.thumbnail_url || 'https://via.placeholder.com/300x300/333333/FFFFFF?text=Loading...';
+      // Fallback for any other file types
+      imageSource = { uri: item.media_url };
+      hasValidThumbnail = true;
     }
     
     return (
       <TouchableOpacity
-        onPress={() => navigation.navigate('UserPostsFeed', { userId: userId, initialPostIndex: index })}
+        onPress={() => navigation.navigate('UserPostsFeed', { userId: userId, initialPostIndex: index, postsData: posts })}
         style={styles.postTile}
       >
         <Image 
-          source={{ uri: thumbnailUri }} 
+          source={imageSource} 
           style={styles.postImage}
           onError={(error) => {
-            console.log('Thumbnail load error for post', item.id, ':', error.nativeEvent.error);
-            console.log('Failed thumbnail URI:', thumbnailUri);
-            console.log('item.thumbnail_url:', item.thumbnail_url);
-            console.log('item.media_url:', item.media_url);
+            console.log(`UserProfileScreen: Error loading thumbnail for post ${item.id}:`, error.nativeEvent.error);
+            // Handle different fallback scenarios for videos
+            if (item.file_type === 'video') {
+              if (imageSource.uri === item.thumbnail_url) {
+                // Thumbnail failed - try video file
+                setFailedThumbnails(prev => new Set([...prev, item.id]));
+              } else if (imageSource.uri === item.media_url) {
+                // Video file failed - use placeholder
+                setFailedVideos(prev => new Set([...prev, item.id]));
+              }
+            }
           }}
           onLoad={() => {
-            console.log('Thumbnail loaded successfully for post', item.id);
+            console.log(`UserProfileScreen: Thumbnail loaded successfully for post ${item.id}`);
           }}
         />
-        {!isImage && (
-          <View style={styles.videoIconOverlay}>
+        {/* Show video icon for all videos, with different styling based on thumbnail availability */}
+        {item.file_type === 'video' && (
+          <View style={[
+            styles.videoIconOverlay,
+            !hasValidThumbnail && styles.videoIconOverlayCenter
+          ]}>
             <Ionicons name="play" size={24} color="rgba(255,255,255,0.8)" />
+          </View>
+        )}
+        {/* Show a loading indicator if we don't have a good thumbnail */}
+        {!hasValidThumbnail && item.file_type === 'video' && (
+          <View style={styles.thumbnailFallback}>
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
           </View>
         )}
       </TouchableOpacity>
     );
-  }, [userId, navigation]); // Add dependencies for useCallback
+  }, [userId, navigation, posts, failedThumbnails, failedVideos]); // Add dependencies for useCallback
 
   if (loading) {
     return (
@@ -331,16 +306,13 @@ function UserProfileScreen({ route, navigation }) {
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ 
-                uri: profile.avatar_url ? `${profile.avatar_url}?t=${Date.now()}` : 'https://via.placeholder.com/150',
-                cache: 'reload'
-              }}
+              source={getProfileImageSource(profile.avatar_url)}
               style={styles.avatar}
               onError={(error) => {
-                console.log('Avatar load error:', error.nativeEvent.error);
+                console.log('UserProfileScreen: Avatar load error:', error.nativeEvent.error);
               }}
               onLoad={() => {
-                console.log('Avatar loaded successfully');
+                console.log('UserProfileScreen: Avatar loaded successfully');
               }}
             />
             <View style={styles.verifiedBadge}>
@@ -596,6 +568,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
     padding: 4,
+  },
+  videoIconOverlayCenter: {
+    top: '50%',
+    left: '50%',
+    right: 'auto',
+    transform: [{ translateX: -16 }, { translateY: -16 }],
+  },
+  thumbnailFallback: {
+    position: 'absolute',
+    top: '30%',
+    left: '50%',
+    transform: [{ translateX: -10 }],
   },
   noPostsText: {
     color: '#888',

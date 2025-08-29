@@ -1,6 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { AntDesign, Ionicons, Feather } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { AntDesign, Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { savePost, unsavePost } from '../utils/supabaseSaved';
+import ShareModal from './ShareModal';
 
 /**
  * Format a numeric count into a more human readable string. 1,234 → 1.2K, etc.
@@ -19,9 +22,10 @@ const formatCount = (num) => {
 };
 
 /**
- * A compact vertical action bar that displays like, comment and share buttons.
+ * A compact vertical action bar that displays like, comment, favorite and more buttons.
  * The like button reflects whether the current user has liked the post via
  * its icon and colour. Counts are formatted and truncated.
+ * The More button provides options for sharing, reporting, blocking, and deletion.
  *
  * Props:
  * - post: The post object (used to fallback to comment_count when a custom
@@ -31,7 +35,10 @@ const formatCount = (num) => {
  * - commentCount: optional override for the displayed comment count.
  * - onLikePress: callback when the like button is pressed.
  * - onCommentPress: callback when the comment button is pressed.
- * - onSharePress: callback when the share button is pressed.
+ * - isFavorited: boolean indicating if the current user has favorited the post.
+ * - onFavoritePress: callback when the favorite button is pressed.
+ * - currentUserId: current user's ID for ownership checks.
+ * - onPostDeleted: callback when a post is deleted.
  */
 const ActionBar = ({
   post,
@@ -41,7 +48,43 @@ const ActionBar = ({
   onLikePress,
   onCommentPress,
   onSharePress,
+  isFavorited = false,
+  onFavoritePress,
+  currentUserId,
+  onPostDeleted,
 }) => {
+  const [pending, setPending] = useState(false);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+
+
+  const handleFavorite = async () => {
+    if (pending) return;
+    setPending(true);
+    const target = !isFavorited;
+    
+    // Optimistic UI
+    onFavoritePress?.(target);
+    
+    try {
+      if (target) {
+        await savePost(post.id);
+      } else {
+        await unsavePost(post.id);
+      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      // Rollback on failure
+      onFavoritePress?.(!target);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleMorePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShareModalVisible(true);
+  };
   // Prefer the provided commentCount state from VideoCard. Fallback to the
   // comment_count on the post if undefined.
   const displayedCommentCount =
@@ -62,11 +105,39 @@ const ActionBar = ({
         <Ionicons name="chatbubble-ellipses" size={30} color="white" />
         <Text style={styles.actionText}>{formatCount(displayedCommentCount)}</Text>
       </TouchableOpacity>
-      {/* Share Button */}
-      <TouchableOpacity style={styles.actionButton} onPress={onSharePress}>
-        <Feather name="share" size={30} color="white" />
-        <Text style={styles.actionText}>Share</Text>
+      {/* Favorite Button */}
+      <TouchableOpacity 
+        style={styles.actionButton} 
+        onPress={handleFavorite}
+        disabled={pending}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <AntDesign 
+          name={isFavorited ? 'star' : 'staro'} 
+          size={30} 
+          color={isFavorited ? '#FFD700' : 'white'} 
+        />
+        <Text style={styles.actionText}>Favorite</Text>
       </TouchableOpacity>
+
+      {/* More Button */}
+      <TouchableOpacity 
+        style={styles.actionButton} 
+        onPress={handleMorePress}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <MaterialIcons name="more-horiz" size={30} color="white" />
+        <Text style={styles.actionText}>More</Text>
+      </TouchableOpacity>
+
+      {/* Share Modal */}
+      <ShareModal
+        visible={shareModalVisible}
+        onClose={() => setShareModalVisible(false)}
+        post={post}
+        currentUserId={currentUserId}
+        onPostDeleted={onPostDeleted}
+      />
     </View>
   );
 };
@@ -75,9 +146,9 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     right: 15,
-    bottom: 85,
+    bottom: 120, // Original position to avoid overlap with avatar
     alignItems: 'center',
-    zIndex: 1,
+    zIndex: 99,
   },
   actionButton: {
     marginBottom: 20,

@@ -6,10 +6,10 @@ import {
   StyleSheet,
   FlatList,
   Dimensions,
-  SafeAreaView,
   TouchableOpacity,
   Text,
-  Platform, // ✅ ADD THIS
+  Platform,
+  Alert,
 } from 'react-native';
 import { supabase } from '../utils/supabase';
 import VideoCard from '../components/VideoCard'; // Assuming this path is correct
@@ -18,28 +18,57 @@ import { Ionicons } from '@expo/vector-icons'; // For back button
 const { height: windowHeight } = Dimensions.get('window');
 
 function UserPostsFeedScreen({ route, navigation }) {
-  const { userId, initialPostIndex = 0 } = route.params; // Get userId and initial index
+  const { userId, initialPostIndex = 0, postsData = null, sourceTab = 'posts' } = route.params; // Get userId and initial index
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(initialPostIndex);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const flatListRef = useRef(null);
+
+  // Get current user
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
+    };
+    fetchUser();
+  }, []);
 
   useEffect(() => {
     const fetchUserPosts = async () => {
       setLoading(true);
+      
+      // If postsData is provided, use it instead of fetching
+      if (postsData) {
+        setPosts(postsData);
+        // Ensure initial index is valid
+        if (initialPostIndex >= postsData.length) {
+          setCurrentVideoIndex(0); // Reset to 0 if initial index is out of bounds
+        } else {
+          setCurrentVideoIndex(initialPostIndex);
+        }
+        setLoading(false);
+        return;
+      }
+      
+      // Otherwise, fetch user posts from database
       const { data, error } = await supabase
         .from('posts')
         .select(`
           id,
           created_at,
           media_url,
+          thumbnail_url,
           content,
           file_type,
           like_count,
           comment_count,
           view_count,
           author_id,
-          profiles (
+          playback_id,
+          mux_playback_id,
+          mux_hls_url,
+          profiles!posts_author_id_fkey (
             username,
             avatar_url
           )
@@ -64,7 +93,7 @@ function UserPostsFeedScreen({ route, navigation }) {
     };
 
     fetchUserPosts();
-  }, [userId, initialPostIndex]);
+  }, [userId, initialPostIndex, postsData]);
 
   // Scroll to the initial post when data is loaded
   useEffect(() => {
@@ -100,17 +129,17 @@ function UserPostsFeedScreen({ route, navigation }) {
 
   if (posts.length === 0) {
     return (
-      <SafeAreaView style={styles.errorContainer}>
+      <View style={styles.errorContainer}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={30} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.errorText}>No posts found for this user.</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Ionicons name="chevron-back" size={30} color="#fff" />
       </TouchableOpacity>
@@ -123,6 +152,10 @@ function UserPostsFeedScreen({ route, navigation }) {
             index={index}
             currentVideoIndex={currentVideoIndex}
             navigation={navigation}
+            currentUserId={currentUserId}
+            onPostDeleted={(deletedPostId) => {
+              setPosts(prevPosts => prevPosts.filter(post => post.id !== deletedPostId));
+            }}
           />
         )}
         keyExtractor={(item) => item.id}
@@ -138,7 +171,7 @@ function UserPostsFeedScreen({ route, navigation }) {
           { length: windowHeight, offset: windowHeight * index, index }
         )}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

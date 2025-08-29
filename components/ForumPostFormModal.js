@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  FlatList,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
@@ -27,6 +28,8 @@ const ForumPostFormModal = ({ visible, onClose, onSuccess, communityName }) => {
   const [mediaUri, setMediaUri] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mediaPermission, setMediaPermission] = useState(null);
+  const [selectedCommunity, setSelectedCommunity] = useState(communityName || null);
+  const [availableCommunities, setAvailableCommunities] = useState([]);
 
   useEffect(() => {
     if (visible) {
@@ -34,8 +37,31 @@ const ForumPostFormModal = ({ visible, onClose, onSuccess, communityName }) => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         setMediaPermission(status === 'granted');
       })();
+      
+      // Load available communities if not already provided
+      if (!communityName) {
+        loadAvailableCommunities();
+      }
     }
-  }, [visible]);
+  }, [visible, communityName]);
+
+  const loadAvailableCommunities = async () => {
+    try {
+      const { data: communities, error } = await supabase
+        .from('forum_categories')
+        .select('id, name')
+        .order('name');
+      
+      if (error) {
+        console.error('Error loading communities:', error);
+        return;
+      }
+      
+      setAvailableCommunities(communities || []);
+    } catch (error) {
+      console.error('Error loading communities:', error);
+    }
+  };
 
   const resetForm = () => {
     setPostType('text');
@@ -43,6 +69,10 @@ const ForumPostFormModal = ({ visible, onClose, onSuccess, communityName }) => {
     setContent('');
     setMediaUri(null);
     setLoading(false);
+    // Only reset community selection if it wasn't provided as a prop
+    if (!communityName) {
+      setSelectedCommunity(null);
+    }
   };
 
   useEffect(() => {
@@ -77,6 +107,10 @@ const ForumPostFormModal = ({ visible, onClose, onSuccess, communityName }) => {
       Alert.alert('Missing Title', 'Please enter a title for your post.');
       return;
     }
+    if (!selectedCommunity && !communityName) {
+      Alert.alert('Missing Community', 'Please select a community to post in.');
+      return;
+    }
     if (postType === 'text' && !content.trim()) {
       Alert.alert('Missing Content', 'Please enter content for your text post.');
       return;
@@ -97,19 +131,31 @@ const ForumPostFormModal = ({ visible, onClose, onSuccess, communityName }) => {
 
       // Get category ID for the community
       let categoryId = null;
-      if (communityName) {
-        const { data: categoryData, error: categoryError } = await supabase
-          .from('forum_categories')
-          .select('id')
-          .eq('name', communityName)
-          .single();
-        
-        if (categoryError || !categoryData) {
-          Alert.alert('Error', 'Could not find the community. Please try again.');
-          setLoading(false);
-          return;
+      const targetCommunity = communityName || selectedCommunity;
+      
+      if (targetCommunity) {
+        // If we already have the ID from selectedCommunity object, use it directly
+        if (typeof selectedCommunity === 'object' && selectedCommunity?.id) {
+          categoryId = selectedCommunity.id;
+        } else {
+          // Otherwise, look up by name
+          const { data: categoryData, error: categoryError } = await supabase
+            .from('forum_categories')
+            .select('id')
+            .eq('name', targetCommunity)
+            .single();
+          
+          if (categoryError || !categoryData) {
+            Alert.alert('Error', 'Could not find the community. Please try again.');
+            setLoading(false);
+            return;
+          }
+          categoryId = categoryData.id;
         }
-        categoryId = categoryData.id;
+      } else {
+        Alert.alert('Error', 'Please select a community to post in.');
+        setLoading(false);
+        return;
       }
 
       // Initialize media fields
@@ -222,6 +268,39 @@ const ForumPostFormModal = ({ visible, onClose, onSuccess, communityName }) => {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Community Selector - Only show if not provided as prop */}
+            {!communityName && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Community *</Text>
+                {selectedCommunity ? (
+                  <TouchableOpacity
+                    style={[styles.textInput, styles.communityDisplay]}
+                    onPress={() => setSelectedCommunity(null)}
+                  >
+                    <Text style={styles.communityDisplayText}>v/{selectedCommunity.name || selectedCommunity}</Text>
+                    <Ionicons name="close" size={20} color="#888" />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.communitySelector}>
+                    <ScrollView style={styles.communityList} showsVerticalScrollIndicator={false}>
+                      {availableCommunities.map((community) => (
+                        <TouchableOpacity
+                          key={community.id}
+                          style={styles.communityOption}
+                          onPress={() => setSelectedCommunity(community)}
+                        >
+                          <Text style={styles.communityOptionText}>v/{community.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {availableCommunities.length === 0 && (
+                      <Text style={styles.loadingText}>Loading communities...</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Title Input */}
             <View style={styles.inputContainer}>
@@ -433,6 +512,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  communityDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  communityDisplayText: {
+    color: '#00BFFF',
+    fontSize: 16,
+    flex: 1,
+  },
+  communitySelector: {
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+    backgroundColor: '#111',
+    maxHeight: 150,
+  },
+  communityList: {
+    maxHeight: 150,
+  },
+  communityOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  communityOptionText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  loadingText: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    padding: 20,
   },
 });
 

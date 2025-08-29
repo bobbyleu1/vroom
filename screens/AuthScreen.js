@@ -13,28 +13,46 @@ import {
 import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function AuthScreen() {
+export default function AuthScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleAuth = async () => {
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        Alert.alert('Check your email to confirm your account!');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      console.log('Attempting to sign in with email:', email.trim().toLowerCase());
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email: email.trim().toLowerCase(), 
+        password 
+      });
+      console.log('Sign in response:', { data, error });
+      
+      if (error) throw error;
+      // Success - user will be automatically navigated by AuthContext
     } catch (error) {
-      Alert.alert(error.message);
+      console.error('Auth error:', error);
+      Alert.alert(
+        'Login Failed', 
+        error.message || 'Something went wrong. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignUp = () => {
+    navigation.navigate('OnboardingWelcome');
   };
 
   return (
@@ -48,6 +66,11 @@ export default function AuthScreen() {
           <Text style={styles.logoText}>Vroom</Text>
           <Ionicons name="car-sport" size={32} color="#00BFFF" style={{ marginLeft: 6 }} />
         </View>
+
+        {/* Mode Indicator */}
+        <Text style={styles.modeText}>
+          Welcome back
+        </Text>
 
         {/* Email */}
         <View style={styles.inputContainer}>
@@ -76,24 +99,31 @@ export default function AuthScreen() {
           />
         </View>
 
-        {/* Auth Button */}
+        {/* Login Button */}
         <TouchableOpacity
           style={styles.button}
-          onPress={handleAuth}
+          onPress={handleLogin}
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Log In'}
+            {loading ? 'Logging in...' : 'Log In'}
           </Text>
         </TouchableOpacity>
 
-        {/* Switch */}
-        <Text style={styles.orText}>Or</Text>
-        <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-          <Text style={styles.switchText}>
-            {isSignUp ? 'Log In' : 'Sign Up'}
+        {/* Sign Up Section */}
+        <View style={styles.signUpContainer}>
+          <Text style={styles.signUpPrompt}>
+            Don't have an account?
           </Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.signUpButton}
+            onPress={handleSignUp}
+          >
+            <Text style={styles.signUpButtonText}>
+              Create Account
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Footer */}
         <Text style={styles.footerText}>Powered by <Text style={{ color: '#888' }}>Vroom</Text></Text>
@@ -122,6 +152,13 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  modeText: {
+    fontSize: 18,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 30,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -152,18 +189,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 18,
   },
-  orText: {
-    textAlign: 'center',
-    color: '#888',
-    marginVertical: 16,
-    fontSize: 16,
+  signUpContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
   },
-  switchText: {
+  signUpPrompt: {
+    color: '#888',
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  signUpButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#00BFFF',
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  signUpButtonText: {
     color: '#00BFFF',
-    textAlign: 'center',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 40,
   },
   footerText: {
     textAlign: 'center',

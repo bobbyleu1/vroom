@@ -1,24 +1,53 @@
 // contexts/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
+import { initializePushNotifications } from '../utils/notificationService';
+import { ensureUserProfile } from '../utils/profileHelpers';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Error getting session:', error);
+        } else {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
+      } catch (error) {
+        console.error('Error initializing session:', error);
+      } finally {
+        setLoading(false);
+      }
     };
+
     getSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
+      setLoading(false);
+      
+      // Initialize push notifications and profile when user signs in
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('Initializing user services for:', session.user.email);
+        
+        // Run in background - don't block UI
+        Promise.all([
+          initializePushNotifications(),
+          ensureUserProfile(session.user.id, session.user.email)
+        ]).catch(error => {
+          console.error('Background initialization failed:', error);
+        });
+      }
     });
 
     return () => listener.subscription.unsubscribe();
@@ -40,7 +69,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

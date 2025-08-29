@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -15,13 +16,18 @@ const placeholderAvatar = 'https://i.imgur.com/1bX5QH6.png';
 
 type Notification = {
   id: string;
-  message: string;
+  recipient_id: string;
   type: string;
+  title?: string;
+  body?: string;
+  data?: any;
+  is_read: boolean;
   created_at: string;
-  related_post_id?: string;
-  related_user_id?: string;
-  sender_id?: string;
-  sender_avatar_url?: string;
+  sender_info?: {
+    id: string;
+    username: string;
+    avatar_url?: string;
+  };
 };
 
 type Props = {
@@ -32,6 +38,7 @@ export default function NotificationsScreen({ navigation }: Props) {
   const [user, setUser] = useState<any>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -44,16 +51,44 @@ export default function NotificationsScreen({ navigation }: Props) {
   const fetchNotifications = async () => {
     if (!user?.id) return;
 
-    const { data, error } = await supabase
-      .from('notification_view')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    try {
+      // Start with a simple query to see what's available
+      console.log('Fetching notifications for user:', user.id);
+      
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-    if (error) {
-      console.error('❌ Error fetching notifications:', error.message);
-    } else {
-      setNotifications(data as Notification[]);
+      if (error) {
+        // If recipient_id doesn't work, try other common field names
+        if (error.message.includes('recipient_id')) {
+          const alternateQuery = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(10);
+            
+          if (alternateQuery.error) {
+            console.error('❌ Error fetching notifications:', alternateQuery.error);
+            setNotifications([]);
+          } else {
+            setNotifications(alternateQuery.data || []);
+          }
+        } else {
+          console.error('❌ Error fetching notifications:', error.message);
+          setNotifications([]);
+        }
+      } else {
+        console.log('✅ Notifications fetched successfully:', data);
+        setNotifications(data || []);
+      }
+    } catch (e) {
+      console.error('Exception in fetchNotifications:', e);
+      setNotifications([]);
     }
 
     setLoading(false);
@@ -72,7 +107,7 @@ export default function NotificationsScreen({ navigation }: Props) {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
+          filter: `recipient_id=eq.${user.id}`,
         },
         (payload) => {
           const newNotif = payload.new;
@@ -90,61 +125,140 @@ export default function NotificationsScreen({ navigation }: Props) {
   }, [user?.id]);
 
   const handlePress = (item: Notification) => {
+    const data = item.data || {};
+    
     switch (item.type) {
-      case 'post_like':
-      case 'post_comment':
-      case 'comment_reply':
-        navigation.navigate('PostDetail', { postId: item.related_post_id });
+      case 'POST_LIKE':
+      case 'POST_COMMENT':
+      case 'COMMENT_REPLY':
+        if (data.post_id) {
+          navigation.navigate('PostDetail', { postId: data.post_id });
+        }
         break;
-      case 'follow':
-        navigation.navigate('UserProfile', { userId: item.related_user_id });
+      case 'FOLLOW':
+        if (item.sender_info?.id) {
+          navigation.navigate('UserProfile', { userId: item.sender_info.id });
+        }
         break;
-      case 'message':
-        navigation.navigate('Messages', { userId: item.related_user_id });
+      case 'DIRECT_MESSAGE':
+        if (item.sender_info?.id) {
+          navigation.navigate('Messages', { userId: item.sender_info.id });
+        }
         break;
       default:
+        console.log('Unhandled notification type:', item.type);
         break;
     }
   };
 
   if (loading) {
-    return <ActivityIndicator style={{ marginTop: 40 }} color="#fff" />;
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00BFFF" />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
-          const avatar = item.sender_avatar_url || placeholderAvatar;
+          // Handle different possible data structures
+          const avatar = item.sender_info?.avatar_url || item.sender_avatar_url || placeholderAvatar;
+          const displayTitle = item.title || item.body || item.message || 'New notification';
+          const notificationType = item.type || 'notification';
 
           return (
             <TouchableOpacity style={styles.card} onPress={() => handlePress(item)}>
               <Image source={{ uri: avatar }} style={styles.avatar} />
               <View style={styles.textContent}>
-                <Text style={styles.message}>{item.message}</Text>
+                <Text style={styles.message}>{displayTitle}</Text>
                 <Text style={styles.meta}>
-                  {item.type.toUpperCase()} • {new Date(item.created_at).toLocaleDateString()}
+                  {notificationType.toUpperCase()} • {new Date(item.created_at).toLocaleDateString()}
                 </Text>
               </View>
-              {item.type === 'post_like' && (
+              {(notificationType === 'POST_LIKE' || notificationType === 'post_like') && (
                 <Ionicons name="heart" size={20} color="#ff3b30" style={styles.heartIcon} />
               )}
             </TouchableOpacity>
           );
         }}
-        ListEmptyComponent={<Text style={styles.empty}>No notifications yet 🚘</Text>}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.empty}>No notifications yet 🚘</Text>
+          </View>
+        }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0d0d0d',
+    backgroundColor: '#000000',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    backgroundColor: '#000000',
+  },
+  backButton: {
+    padding: 4,
+    borderRadius: 8,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    flex: 1,
+    textAlign: 'center',
+    marginRight: -32, // Offset to center text properly with back button
+  },
+  headerSpacer: {
+    width: 32, // Same width as back button to balance layout
+  },
+  listContainer: {
     padding: 12,
+    paddingBottom: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   card: {
     flexDirection: 'row',
@@ -177,10 +291,15 @@ const styles = StyleSheet.create({
   heartIcon: {
     marginLeft: 8,
   },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 200,
+  },
   empty: {
     color: '#888',
     textAlign: 'center',
-    marginTop: 60,
     fontSize: 16,
   },
 });

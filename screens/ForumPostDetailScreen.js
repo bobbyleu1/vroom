@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 
 // Import Supabase client
 import { supabase } from '../utils/supabase';
+import { notifyForumReply, notifyForumLike } from '../utils/notificationHelpers';
 
 // Utility function to format time (copied from ForumsScreen for self-containment)
 const formatTimeAgo = (timestamp) => {
@@ -72,12 +73,10 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
         created_at_formatted: formatTimeAgo(postData.created_at),
       });
 
-      // Fetch comments for the post. Explicitly select only the fields we need and
-      // include the associated profile for author username. We also select
-      // like_count so we can display the number of likes on each comment.
+      // Fetch comments for the post
       const { data: commentsData, error: commentsError } = await supabase
         .from('forum_comments')
-        .select(`id, post_id, author_id, content, created_at, parent_comment_id, like_count, profiles(username)`) // join author username via foreign key relation
+        .select(`id, post_id, author_id, content, created_at, parent_comment_id, like_count`)
         .eq('post_id', postId)
         .order('created_at', { ascending: true });
 
@@ -87,6 +86,28 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
         Alert.alert('Error', 'Could not load comments. Please try again.');
         setComments([]);
         return;
+      }
+
+      // Get unique author IDs to fetch usernames
+      const authorIds = [...new Set(commentsData.map(comment => comment.author_id))];
+      
+      // Fetch usernames for all comment authors
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', authorIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError.message);
+        // Continue without usernames rather than failing completely
+      }
+
+      // Create a map of user ID to username for quick lookup
+      const usernameMap = new Map();
+      if (profilesData) {
+        profilesData.forEach(profile => {
+          usernameMap.set(profile.id, profile.username);
+        });
       }
 
       // Build a threaded structure of comments. We first map the returned
@@ -100,7 +121,7 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
           id: comment.id,
           post_id: comment.post_id,
           author_id: comment.author_id,
-          author_username: comment.profiles?.username || 'Anonymous',
+          author_username: usernameMap.get(comment.author_id) || 'Anonymous',
           content: comment.content,
           created_at: comment.created_at,
           created_at_formatted: formatTimeAgo(comment.created_at),
@@ -171,6 +192,10 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
         }));
       } else {
         console.log('Post upvoted successfully');
+        // Send push notification to post owner
+        if (post.author_id && currentUserId !== post.author_id) {
+          await notifyForumLike(postId, currentUserId, post.author_id);
+        }
       }
     } catch (error) {
       console.error('Exception during upvote:', error.message);
@@ -230,6 +255,12 @@ const ForumPostDetailScreen = ({ navigation, route }) => {
         // not resort the list here to retain the latest comment at the top.
         setComments(prevComments => [newCommentObj, ...prevComments]);
         setNewComment(''); // Clear input field
+        
+        // Send push notification to post owner
+        if (post.author_id && currentUserId !== post.author_id) {
+          await notifyForumReply(postId, currentUserId, post.author_id);
+        }
+        
         // Optionally, update post comment count here if not handled by a database trigger
         // For now, assuming database trigger handles forum_posts.comment_count
       }

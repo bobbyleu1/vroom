@@ -34,6 +34,7 @@ const NewMessageScreen = ({ navigation }) => {
       .select('id, username, avatar_url')
       .ilike('username', `%${text}%`)
       .neq('id', userId) // exclude self
+      .limit(50)
 
     if (!error) setResults(data);
   };
@@ -41,41 +42,29 @@ const NewMessageScreen = ({ navigation }) => {
   const startConversation = async (otherUser) => {
     if (!userId || !otherUser?.id) return;
 
-    const [id1, id2] = [userId, otherUser.id].sort(); // ensure ordering
-
-    // Check if convo already exists
-    const { data: existing } = await supabase
-      .from('dm_conversations')
-      .select('id')
-      .eq('user1_id', id1)
-      .eq('user2_id', id2)
-      .maybeSingle();
-
-    let conversationId = existing?.id;
-
-    if (!conversationId) {
-      // Create new conversation
-      const { data, error } = await supabase
-        .from('dm_conversations')
-        .insert({
-          user1_id: id1,
-          user2_id: id2,
-        })
-        .select('id')
-        .single();
+    try {
+      // Use the new database function to get or create conversation
+      const { data, error } = await supabase.rpc('get_or_create_dm_conversation', {
+        user1_uuid: userId,
+        user2_uuid: otherUser.id
+      });
 
       if (error) {
+        console.error('Error creating conversation:', error);
         Alert.alert('Error', 'Could not create conversation.');
         return;
       }
 
-      conversationId = data.id;
-    }
+      const conversationId = data;
 
-    navigation.navigate('ChatScreen', {
-      conversationId,
-      recipient: otherUser,
-    });
+      navigation.navigate('ChatScreen', {
+        conversationId,
+        recipient: otherUser,
+      });
+    } catch (error) {
+      console.error('Exception starting conversation:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
+    }
   };
 
   return (
@@ -99,7 +88,7 @@ const NewMessageScreen = ({ navigation }) => {
             onPress={() => startConversation(item)}
           >
             <Image
-              source={item.avatar_url ? { uri: item.avatar_url } : require('../assets/avatar_placeholder.png')}
+              source={item.avatar_url ? { uri: item.avatar_url } : { uri: 'https://via.placeholder.com/44' }}
               style={styles.avatar}
             />
             <Text style={styles.username}>@{item.username}</Text>

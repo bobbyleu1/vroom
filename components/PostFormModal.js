@@ -18,7 +18,8 @@ import {
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { v4 as uuidv4 } from 'uuid'; // For unique file names
+// uuid import removed as file naming is handled by the shared upload utility
+import { uploadMedia } from '../utils/mediaUpload.js';
 
 const PostFormModal = ({ visible, onClose, onSuccess, groupId }) => {
   const [postType, setPostType] = useState('text'); // 'text', 'image', 'video'
@@ -75,37 +76,10 @@ const PostFormModal = ({ visible, onClose, onSuccess, groupId }) => {
     }
   };
 
-  const uploadMediaToSupabase = async (uri, mimeType) => {
-    if (!uri) return null;
-
-    const fileExtension = uri.split('.').pop().toLowerCase();
-    const fileName = `group_posts/${uuidv4()}.${fileExtension}`; // Store in 'group_posts' bucket
-
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-
-      const { data, error } = await supabase.storage.from('group_posts').upload(fileName, blob, {
-        cacheControl: '3600',
-        upsert: false,
-        contentType: mimeType,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      const { data: publicUrlData } = supabase.storage.from('group_posts').getPublicUrl(fileName);
-      return publicUrlData.publicUrl;
-    } catch (error) {
-      console.error('Error uploading media:', error.message);
-      Alert.alert('Upload Error', 'Failed to upload media: ' + error.message);
-      return null;
-    }
-  };
 
 
   const handleSubmit = async () => {
+    // Basic validation based on post type
     if (!title.trim()) {
       Alert.alert('Missing Title', 'Please enter a title for your post.');
       return;
@@ -120,59 +94,66 @@ const PostFormModal = ({ visible, onClose, onSuccess, groupId }) => {
     }
 
     setLoading(true);
-    let publicUrl = null;
-    let mimeType = null;
-
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         Alert.alert('Authentication Required', 'You must be logged in to create a post.');
         setLoading(false);
         return;
       }
-
-      if (postType === 'image' && mediaUri) {
-        // Attempt to derive MIME type from URI, or default to common ones
-        mimeType = `image/${mediaUri.split('.').pop().toLowerCase()}`;
-        if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(mediaUri.split('.').pop().toLowerCase())) {
-          mimeType = 'image/jpeg'; // Fallback
-        }
-        publicUrl = await uploadMediaToSupabase(mediaUri, mimeType);
-        if (!publicUrl) {
+      // Initialize media fields
+      let mediaUrl = null;
+      let thumbnailUrl = null;
+      let imageUrls = null;
+      // If media selected, upload using shared utility
+      if ((postType === 'image' || postType === 'video') && mediaUri) {
+        const result = await uploadMedia(mediaUri, user.id, postType);
+        mediaUrl = result.mediaUrl;
+        thumbnailUrl = result.thumbnailUrl;
+        imageUrls = result.imageUrls;
+        // If video and upload failed (no mediaUrl), abort
+        if (postType === 'video' && !mediaUrl) {
           setLoading(false);
-          return; // Error already alerted by uploadMediaToSupabase
+          Alert.alert('Upload Error', 'Failed to upload your video. Please try again.');
+          return;
         }
-      } else if (postType === 'video' && mediaUri) {
-        // Attempt to derive MIME type from URI, or default to common ones
-        mimeType = `video/${mediaUri.split('.').pop().toLowerCase()}`;
-        if (!['mp4', 'mov', 'avi', 'mkv'].includes(mediaUri.split('.').pop().toLowerCase())) {
-          mimeType = 'video/mp4'; // Fallback
-        }
-        publicUrl = await uploadMediaToSupabase(mediaUri, mimeType);
-        if (!publicUrl) {
+        // If image and upload failed (no imageUrls), abort
+        if (postType === 'image' && (!imageUrls || imageUrls.length === 0)) {
           setLoading(false);
-          return; // Error already alerted by uploadMediaToSupabase
+          Alert.alert('Upload Error', 'Failed to upload your image. Please try again.');
+          return;
         }
       }
-
-      const { error: postError } = await supabase.from('posts').insert([
-        {
-          group_id: groupId,
-          user_id: user.id,
-          type: postType,
-          title: title.trim(),
-          content: content.trim(),
-          media_url: publicUrl,
-        },
-      ]);
-
-      if (postError) {
-        throw postError;
+      // Prepare record for insertion into group_posts
+      const record = {
+        group_id: groupId,
+        author_id: user.id,
+        title: title.trim(),
+        content: content.trim() || null,
+        post_type: postType,
+        media_url: null,
+        thumbnail_url: null,
+        image_urls: null,
+      };
+      if (postType === 'image') {
+        // For images, assign image_urls array and leave media & thumbnail null
+        record.image_urls = imageUrls;
+      } else if (postType === 'video') {
+        // For videos, assign media_url and thumbnail_url
+        record.media_url = mediaUrl;
+        record.thumbnail_url = thumbnailUrl;
       }
-
+      const { error: insertError } = await supabase
+        .from('group_posts')
+        .insert([record]);
+      if (insertError) {
+        throw insertError;
+      }
       Alert.alert('Success', 'Post created successfully!');
       resetForm();
-      onSuccess(); // Trigger refresh in parent component
+      onSuccess();
       onClose();
     } catch (error) {
       console.error('Error creating post:', error.message);

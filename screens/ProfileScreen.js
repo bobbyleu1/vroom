@@ -12,11 +12,12 @@ import {
   FlatList,
   Platform,
   ScrollView,
-  Alert, // Added Alert for user feedback
+  Alert,
 } from 'react-native';
 import { supabase } from '../utils/supabase';
-import { useNavigation, useFocusEffect } from '@react-navigation/native'; // Added useFocusEffect
-import { Video } from 'expo-av'; // Only needed for preview thumbnails if not using Image directly
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Video } from 'expo-av';
+import { getProfileImageSource } from '../utils/profileHelpers';
 
 const { width } = Dimensions.get('window');
 
@@ -41,147 +42,290 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
+  const [savedPosts, setSavedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followers, setFollowers] = useState(0);
   const [following, setFollowing] = useState(0);
-  const currentUserIdRef = useRef(null); // Ref to store current user ID
+  const [activeTab, setActiveTab] = useState('posts');
+  const [failedThumbnails, setFailedThumbnails] = useState(new Set());
+  const [failedVideos, setFailedVideos] = useState(new Set());
+  const currentUserIdRef = useRef(null);
 
-  // useFocusEffect to refetch data when the screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      const fetchProfileAndPosts = async () => {
-        setLoading(true);
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  useEffect(() => {
+    const fetchProfileAndPosts = async (retryCount = 0) => {
+      setLoading(true);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (sessionError) {
-          console.error("Error getting session:", sessionError.message);
-          Alert.alert("Error", "Failed to get user session.");
-          setLoading(false);
+      if (sessionError) {
+        console.error("Error getting session:", sessionError.message);
+        if (retryCount < 2) {
+          setTimeout(() => fetchProfileAndPosts(retryCount + 1), 1000);
           return;
         }
+        Alert.alert("Error", "Failed to get user session.");
+        setLoading(false);
+        return;
+      }
 
-        if (!session) {
-          // If no session, perhaps navigate to login or handle unauthenticated state
-          setProfile(null);
-          setPosts([]);
-          setFollowers(0);
-          setFollowing(0);
-          setLoading(false);
-          return;
-        }
+      if (!session) {
+        setProfile(null);
+        setPosts([]);
+        setFollowers(0);
+        setFollowing(0);
+        setLoading(false);
+        return;
+      }
 
-        const userId = session.user.id;
-        currentUserIdRef.current = userId; // Store user ID in ref
+      const userId = session.user.id;
+      currentUserIdRef.current = userId;
 
-        try {
-          // Fetch profile data
-          const { data: userProfile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-          if (profileError) {
-            console.error("Error fetching user profile:", profileError.message);
-            Alert.alert("Error", "Could not load profile data.");
-          } else {
-            setProfile(userProfile);
-          }
-
-          // Fetch user's posts, including profiles data for VideoCard
-          const { data: userPosts, error: postsError } = await supabase
-            .from('posts')
-            .select(`
+      try {
+        // Batch all requests in parallel for better performance
+        const [profileResult, postsResult, savedPostsResult, followersResult, followingResult] = await Promise.allSettled([
+          supabase.from('profiles').select('*').eq('id', userId).single(),
+          supabase.from('posts').select(`
+            id,
+            created_at,
+            media_url,
+            thumbnail_url,
+            content,
+            file_type,
+            like_count,
+            comment_count,
+            view_count,
+            author_id,
+            profiles!posts_author_id_fkey (
+              username,
+              avatar_url
+            )
+          `).eq('author_id', userId).order('created_at', { ascending: false }),
+          supabase.from('saved_posts').select(`
+            posts (
               id,
               created_at,
               media_url,
+              thumbnail_url,
               content,
               file_type,
               like_count,
               comment_count,
               view_count,
               author_id,
-              profiles (
+              profiles!posts_author_id_fkey (
                 username,
                 avatar_url
               )
-            `)
-            .eq('author_id', userId)
-            .order('created_at', { ascending: false });
+            )
+          `).eq('user_id', userId).order('created_at', { ascending: false }),
+          supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+          supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId)
+        ]);
 
-          if (postsError) {
-            console.error("Error fetching user posts:", postsError.message);
-            Alert.alert("Error", "Could not load posts.");
-          } else {
-            setPosts(userPosts || []);
+        // Handle profile data
+        if (profileResult.status === 'fulfilled' && !profileResult.value.error) {
+          setProfile(profileResult.value.data);
+        } else {
+          console.error("Error fetching user profile:", profileResult.value?.error?.message);
+          if (retryCount < 2) {
+            setTimeout(() => fetchProfileAndPosts(retryCount + 1), 1000);
+            return;
           }
+        }
 
-          // Fetch follower count
-          const { count: followersCount, error: followersError } = await supabase
-            .from('user_follows')
-            .select('*', { count: 'exact', head: true })
-            .eq('following_id', userId);
+        // Handle posts data
+        if (postsResult.status === 'fulfilled' && !postsResult.value.error) {
+          setPosts(postsResult.value.data || []);
+        } else {
+          console.error("Error fetching user posts:", postsResult.value?.error?.message);
+          setPosts([]);
+        }
 
-          if (followersError) {
-            console.error("Error fetching followers:", followersError.message);
-          } else {
-            setFollowers(followersCount || 0);
-          }
+        // Handle saved posts data
+        if (savedPostsResult.status === 'fulfilled' && !savedPostsResult.value.error) {
+          setSavedPosts(savedPostsResult.value.data?.map(item => item.posts) || []);
+        } else {
+          console.error("Error fetching saved posts:", savedPostsResult.value?.error?.message);
+          setSavedPosts([]);
+        }
 
-          // Fetch following count
-          const { count: followingCount, error: followingError } = await supabase
-            .from('user_follows')
-            .select('*', { count: 'exact', head: true })
-            .eq('follower_id', userId);
+        // Handle followers count
+        if (followersResult.status === 'fulfilled' && !followersResult.value.error) {
+          setFollowers(followersResult.value.count || 0);
+        } else {
+          console.error("Error fetching followers:", followersResult.value?.error?.message);
+          setFollowers(0);
+        }
 
-          if (followingError) {
-            console.error("Error fetching following:", followingError.message);
-          } else {
-            setFollowing(followingCount || 0);
-          }
+        // Handle following count
+        if (followingResult.status === 'fulfilled' && !followingResult.value.error) {
+          setFollowing(followingResult.value.count || 0);
+        } else {
+          console.error("Error fetching following:", followingResult.value?.error?.message);
+          setFollowing(0);
+        }
 
-        } catch (error) {
-          console.error("Caught error during profile fetch:", error.message);
-          Alert.alert("Error", "An unexpected error occurred while loading profile.");
-        } finally {
-          setLoading(false);
+      } catch (error) {
+        console.error("Caught error during profile fetch:", error.message);
+        if (retryCount < 2) {
+          setTimeout(() => fetchProfileAndPosts(retryCount + 1), 1000);
+          return;
+        }
+        Alert.alert("Error", "An unexpected error occurred while loading profile.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfileAndPosts();
+  }, []);
+
+  // Add a focused effect for refreshing posts only when needed
+  useFocusEffect(
+    useCallback(() => {
+      const refreshPosts = async () => {
+        if (!currentUserIdRef.current) return;
+        
+        const { data: userPosts } = await supabase
+          .from('posts')
+          .select(`
+            id,
+            created_at,
+            media_url,
+            thumbnail_url,
+            content,
+            file_type,
+            like_count,
+            comment_count,
+            view_count,
+            author_id,
+            profiles!posts_author_id_fkey (
+              username,
+              avatar_url
+            )
+          `)
+          .eq('author_id', currentUserIdRef.current)
+          .order('created_at', { ascending: false });
+
+        if (userPosts) {
+          setPosts(userPosts);
+        }
+
+        // Also refresh saved posts
+        const { data: savedPostsData } = await supabase
+          .from('saved_posts')
+          .select(`
+            posts (
+              id,
+              created_at,
+              media_url,
+              thumbnail_url,
+              content,
+              file_type,
+              like_count,
+              comment_count,
+              view_count,
+              author_id,
+              profiles!posts_author_id_fkey (
+                username,
+                avatar_url
+              )
+            )
+          `)
+          .eq('user_id', currentUserIdRef.current)
+          .order('created_at', { ascending: false });
+
+        if (savedPostsData) {
+          setSavedPosts(savedPostsData.map(item => item.posts));
         }
       };
 
-      fetchProfileAndPosts();
-
-      // Return a cleanup function if needed (e.g., for subscriptions)
-      // No specific cleanup needed for these simple fetches.
+      refreshPosts();
     }, [])
   );
 
-  const renderPost = ({ item, index }) => (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('UserPostsFeed', { userId: currentUserIdRef.current, initialPostIndex: index })}
-      style={styles.postTile}
-    >
-      {item.file_type === 'image' ? (
-        <Image source={{ uri: item.media_url }} style={styles.postImage} />
-      ) : (
-        // For video thumbnails, you might just use an Image if you have a thumbnail URL,
-        // or a paused Video component if you want the first frame.
-        <Video
-          source={{ uri: item.media_url }}
+  const renderPost = ({ item, index }) => {
+    const data = activeTab === 'posts' ? posts : savedPosts;
+    
+    // Determine the appropriate image source for the thumbnail
+    let imageSource;
+    if (item.file_type === 'image') {
+      imageSource = { uri: item.media_url };
+    } else if (item.file_type === 'video') {
+      // For videos, try thumbnail first, then video file, then placeholder
+      const hasThumbnail = item.thumbnail_url && item.thumbnail_url.trim() !== '';
+      const thumbnailFailed = failedThumbnails.has(item.id);
+      const videoFailed = failedVideos.has(item.id);
+      
+      if (hasThumbnail && !thumbnailFailed) {
+        imageSource = { uri: item.thumbnail_url };
+      } else if (!videoFailed) {
+        imageSource = { uri: item.media_url };
+      } else {
+        // Both thumbnail and video failed - use placeholder
+        imageSource = require('../assets/video-placeholder.png');
+      }
+    } else {
+      // Fallback for any other file types
+      imageSource = { uri: item.media_url };
+    }
+    
+    return (
+      <TouchableOpacity
+        onPress={() => navigation.navigate('UserPostsFeed', { 
+          userId: currentUserIdRef.current, 
+          initialPostIndex: index,
+          postsData: data,
+          sourceTab: activeTab
+        })}
+        style={styles.postTile}
+      >
+        <Image 
+          source={imageSource} 
           style={styles.postImage}
-          resizeMode="cover"
-          shouldPlay={false}
-          isLooping={false} // No need to loop for a static thumbnail
-          isMuted // Mute preview
+          onError={(error) => {
+            console.log(`ProfileScreen: Error loading thumbnail for post ${item.id}:`, error.nativeEvent.error);
+            // Handle different fallback scenarios for videos
+            if (item.file_type === 'video') {
+              if (imageSource.uri === item.thumbnail_url) {
+                // Thumbnail failed - try video file
+                setFailedThumbnails(prev => new Set([...prev, item.id]));
+              } else if (imageSource.uri === item.media_url) {
+                // Video file failed - use placeholder
+                setFailedVideos(prev => new Set([...prev, item.id]));
+              }
+            }
+          }}
         />
-      )}
-      {/* Optional: Add an icon for video posts */}
-      {item.file_type === 'video' && (
-        <View style={styles.videoIconOverlay}>
-          <Ionicons name="play" size={24} color="rgba(255,255,255,0.8)" />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+        {item.file_type === 'video' && (
+          <View style={styles.videoIconOverlay}>
+            <Ionicons name="play" size={24} color="rgba(255,255,255,0.8)" />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTabContent = () => {
+    const data = activeTab === 'posts' ? posts : savedPosts;
+    const emptyMessage = activeTab === 'posts' 
+      ? "You haven't posted anything yet." 
+      : "You haven't saved any posts yet.";
+
+    if (data.length > 0) {
+      return (
+        <FlatList
+          data={data}
+          renderItem={renderPost}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          scrollEnabled={false}
+          contentContainerStyle={styles.grid}
+        />
+      );
+    } else {
+      return <Text style={styles.noPostsText}>{emptyMessage}</Text>;
+    }
+  };
 
   if (loading) {
     return (
@@ -206,9 +350,27 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
         <View style={styles.header}>
-          <Image source={{ uri: profile.avatar_url || 'https://via.placeholder.com/150' }} style={styles.avatar} />
-          <Text style={styles.username}>@{profile.username || 'Unnamed'}</Text>
-          {profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>} {/* Added Bio */}
+          <View style={styles.avatarContainer}>
+            <Image 
+              source={getProfileImageSource(profile.avatar_url)} 
+              style={styles.avatar}
+              onError={(error) => {
+                console.log('ProfileScreen: Avatar load error:', error.nativeEvent.error);
+              }}
+              onLoad={() => {
+                console.log('ProfileScreen: Avatar loaded successfully');
+              }}
+            />
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark" size={16} color="white" />
+            </View>
+          </View>
+          <Text style={styles.username}>@{profile.username || 'NewUser'}</Text>
+          {profile.bio ? (
+            <Text style={styles.profileBio}>{profile.bio}</Text>
+          ) : (
+            <Text style={styles.profileBio}>Automotive enthusiast</Text>
+          )}
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statNumber}>{formatCount(posts.length)}</Text>
@@ -231,19 +393,25 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.postsSectionHeader}>Your Posts</Text> {/* New header for posts section */}
-        {posts.length > 0 ? (
-          <FlatList
-            data={posts}
-            renderItem={renderPost}
-            keyExtractor={(item) => item.id}
-            numColumns={3}
-            scrollEnabled={false} // Disable FlatList's own scrolling
-            contentContainerStyle={styles.grid}
-          />
-        ) : (
-          <Text style={styles.noPostsText}>You haven't posted anything yet.</Text>
-        )}
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'posts' && styles.activeTab]}
+            onPress={() => setActiveTab('posts')}
+          >
+            <Text style={[styles.tabText, activeTab === 'posts' && styles.activeTabText]}>Posts</Text>
+            {activeTab === 'posts' && <View style={styles.tabUnderline} />}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
+            onPress={() => setActiveTab('saved')}
+          >
+            <Text style={[styles.tabText, activeTab === 'saved' && styles.activeTabText]}>Saved</Text>
+            {activeTab === 'saved' && <View style={styles.tabUnderline} />}
+          </TouchableOpacity>
+        </View>
+
+        {renderTabContent()}
       </ScrollView>
     </View>
   );
@@ -252,20 +420,20 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1d',
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1d',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1d',
   },
   errorText: {
     color: '#fff',
@@ -285,99 +453,140 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingVertical: 30,
-    borderBottomWidth: 1, // Added a separator
-    borderBottomColor: '#333',
+    paddingVertical: 40,
     paddingHorizontal: 20,
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 15,
+  },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderColor: '#00BFFF',
-    borderWidth: 2,
-    marginBottom: 10,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#333',
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00BFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#1a1a1d',
   },
   username: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 8,
   },
-  profileBio: { // Added bio style
+  profileBio: {
     color: '#ccc',
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 15,
-    paddingHorizontal: 10,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+    lineHeight: 20,
   },
   statsRow: {
     flexDirection: 'row',
-    marginTop: 15,
-    width: '100%', // Ensure it takes full width to distribute stats
-    justifyContent: 'space-around', // Distribute space evenly
+    marginTop: 10,
+    marginBottom: 25,
+    width: '80%',
+    justifyContent: 'space-between',
   },
   statBox: {
     alignItems: 'center',
-    // Removed marginHorizontal to let space-around handle distribution
   },
   statNumber: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   statLabel: {
-    color: '#aaa',
+    color: '#888',
     fontSize: 14,
+    marginTop: 2,
   },
   editBtn: {
-    marginTop: 20, // Increased margin for better spacing
-    borderWidth: 1,
-    borderColor: '#fff',
-    paddingVertical: 8, // Increased padding
-    paddingHorizontal: 30, // Increased padding
-    borderRadius: 25, // More rounded corners
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+    minWidth: 150,
   },
   editBtnText: {
     color: '#fff',
-    fontSize: 15, // Slightly larger font
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
-  postsSectionHeader: { // Style for "Your Posts" header
+  tabContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    marginHorizontal: 0,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  activeTab: {
+    // Active tab styling handled by activeTabText and tabUnderline
+  },
+  tabText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  activeTabText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 15,
-    marginTop: 20,
-    marginBottom: 10,
+    fontWeight: '600',
+  },
+  tabUnderline: {
+    position: 'absolute',
+    bottom: -1,
+    left: '25%',
+    right: '25%',
+    height: 3,
+    backgroundColor: '#ff6b35',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start', // Align items to the start
+    justifyContent: 'flex-start',
+    paddingHorizontal: 1,
   },
   postTile: {
     width: width / 3,
     aspectRatio: 1,
-    borderWidth: 0.5,
-    borderColor: '#1a1a1a', // Slightly darker border for grid lines
+    borderWidth: 1,
+    borderColor: '#2a2a2d',
   },
   postImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
-  videoIconOverlay: { // Style for video play icon
+  videoIconOverlay: {
     position: 'absolute',
     top: 5,
     right: 5,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 5,
-    padding: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    padding: 4,
   },
   noPostsText: {
-    color: '#ccc',
+    color: '#888',
     textAlign: 'center',
-    marginTop: 30,
+    marginTop: 50,
     fontSize: 16,
   },
 });

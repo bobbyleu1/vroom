@@ -5,19 +5,23 @@ if (typeof globalThis.structuredClone !== 'function') {
 
 import 'react-native-get-random-values'; // <<< KEEP THIS AT THE VERY TOP
 
-import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import React, { useRef } from 'react';
+import mobileAds from 'react-native-google-mobile-ads';
+import { View, ActivityIndicator, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons, Feather, Entypo } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 
-import UploadScreen from './screens/UploadScreen';
+import CameraScreen from './screens/CameraScreen.js';
+import PostPreviewScreen from './screens/PostPreviewScreen.js';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ProfileScreen from './screens/ProfileScreen';
-import LoginScreen from './screens/LoginScreen';
-import FeedScreen from './screens/FeedScreen';
+import AuthScreen from './screens/AuthScreen';
+import OnboardingWelcomeScreen from './screens/OnboardingWelcomeScreen';
+import OnboardingProfilePictureScreen from './screens/OnboardingProfilePictureScreen';
+import SimpleFeedScreen from './screens/SimpleFeedScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import MoreScreen from './screens/MoreScreen';
 import GroupsScreen from './screens/GroupsScreen';
@@ -26,15 +30,93 @@ import ForumsScreen from './screens/ForumsScreen';
 import ForumPostDetailScreen from './screens/ForumPostDetailScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import MessagesScreen from './screens/MessagesScreen';
+import SettingsScreen from './screens/SettingsScreen';
 import NewMessageScreen from './screens/NewMessageScreen';
 import ChatScreen from './screens/ChatScreen';
 import UserProfileScreen from './screens/UserProfileScreen';
 import UserPostsFeedScreen from './screens/UserPostsFeedScreen';
+import SearchScreen from './screens/SearchScreen';
 
-import { supabase } from './utils/supabase';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ScrollLockProvider } from './contexts/ScrollLockContext';
+import { UnreadMessagesProvider, useUnreadMessages } from './contexts/UnreadMessagesContext';
+import { initializePushNotifications } from './utils/notificationService';
+import ErrorBoundary from './components/ErrorBoundary';
+import RedDot, { RedDotPositions } from './components/RedDot';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+// Custom More Tab Icon with red dot for unread messages
+function MoreTabIcon({ color, size, focused }) {
+  const { hasUnreadMessages } = useUnreadMessages();
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <Feather name="more-horizontal" size={size} color={color} />
+      <RedDot 
+        visible={hasUnreadMessages} 
+        style={RedDotPositions.tabBadge}
+        size={10}
+      />
+    </View>
+  );
+}
+
+// Custom Feed Tab Button with double tap refresh
+function FeedTabButton({ children, onPress, focused, accessibilityState }) {
+  const lastTap = useRef(null);
+  const DOUBLE_TAP_DELAY = 300;
+  const refreshCallbacks = useRef([]);
+  
+  // Register refresh callback from FeedScreen
+  const registerRefreshCallback = (callback) => {
+    refreshCallbacks.current = [callback]; // Replace any existing callback
+  };
+  
+  // Expose globally so FeedScreen can register
+  React.useEffect(() => {
+    global.registerFeedRefresh = registerRefreshCallback;
+    return () => {
+      delete global.registerFeedRefresh;
+    };
+  }, []);
+  
+  const handleTabPress = () => {
+    const now = Date.now();
+    
+    if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
+      // Double tap detected - refresh feed
+      console.log('Double tap detected on Feed tab - refreshing feed');
+      if (refreshCallbacks.current.length > 0) {
+        refreshCallbacks.current.forEach(callback => callback());
+        console.log('Refresh callbacks executed:', refreshCallbacks.current.length);
+      } else {
+        console.log('No refresh callbacks registered');
+      }
+      lastTap.current = null;
+    } else {
+      // Single tap - normal navigation
+      lastTap.current = now;
+      setTimeout(() => {
+        if (lastTap.current === now) {
+          onPress();
+          lastTap.current = null;
+        }
+      }, DOUBLE_TAP_DELAY);
+    }
+  };
+  
+  return (
+    <TouchableOpacity 
+      onPress={handleTabPress} 
+      style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+      accessibilityState={accessibilityState}
+    >
+      {children}
+    </TouchableOpacity>
+  );
+}
 
 function MainApp() {
   return (
@@ -61,15 +143,14 @@ function MainApp() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Friends') {
             iconName = focused ? 'people' : 'people-outline';
-          } else if (route.name === 'Upload') {
+          } else if (route.name === 'Camera') {
             return (
               <View style={styles.uploadButton}>
                 <Entypo name="plus" size={32} color="#000" />
               </View>
             );
           } else if (route.name === 'More') {
-            iconName = 'more-horizontal';
-            IconComponent = Feather;
+            return <MoreTabIcon color={color} size={size} focused={focused} />;
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -79,34 +160,41 @@ function MainApp() {
       })}
     >
       {/* ⚠️ Make sure there's NO text, whitespace, or logic here outside of <Screen />s */}
-      <Tab.Screen name="Feed" component={FeedScreen} />
+      <Tab.Screen 
+        name="Feed" 
+        component={SimpleFeedScreen}
+        options={{
+          tabBarButton: (props) => <FeedTabButton {...props} />
+        }}
+      />
       <Tab.Screen name="Friends" component={FriendsScreen} />
-      <Tab.Screen name="Upload" component={UploadScreen} />
+      <Tab.Screen 
+        name="Camera" 
+        component={CameraScreen}
+        options={{
+          tabBarLabel: () => null,
+        }}
+      />
       <Tab.Screen name="More" component={MoreScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
 
-export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
+function AppNavigator() {
+  const { session, loading } = useAuth();
 
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setLoggedIn(!!session);
-      setChecking(false);
-    });
+  // Initialize push notifications for logged in users
+  React.useEffect(() => {
+    if (session?.user) {
+      // Run in background - don't block UI
+      initializePushNotifications().catch(error => {
+        console.error('Background push notification init failed:', error);
+      });
+    }
+  }, [session?.user]);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setLoggedIn(!!session);
-      setChecking(false);
-    });
-
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  if (checking) {
+  if (loading) {
     return (
       <View style={styles.loadingIndicator}>
         <ActivityIndicator size="large" color="#00BFFF" />
@@ -118,9 +206,10 @@ export default function App() {
     <NavigationContainer>
       <StatusBar style="auto" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {loggedIn ? (
+        {session ? (
           <>
             <Stack.Screen name="MainApp" component={MainApp} />
+            <Stack.Screen name="PostPreview" component={PostPreviewScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Groups" component={GroupsScreen} />
             <Stack.Screen name="GroupDetail" component={GroupDetailScreen} />
@@ -128,8 +217,10 @@ export default function App() {
             <Stack.Screen name="ForumPostDetail" component={ForumPostDetailScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
             <Stack.Screen name="MessagesScreen" component={MessagesScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="NewMessageScreen" component={NewMessageScreen} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
+            <Stack.Screen name="Search" component={SearchScreen} />
             <Stack.Screen
               name="UserProfile"
               component={UserProfileScreen}
@@ -150,10 +241,66 @@ export default function App() {
             />
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Auth" component={AuthScreen} />
+            <Stack.Screen name="OnboardingWelcome" component={OnboardingWelcomeScreen} />
+            <Stack.Screen name="OnboardingProfilePicture" component={OnboardingProfilePictureScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  // Global error handler for unhandled exceptions
+  React.useEffect(() => {
+    const handleError = (error, isFatal) => {
+      console.error('Global error handler:', error, 'Fatal:', isFatal);
+      
+      // Don't crash the app for non-fatal errors
+      if (!isFatal) {
+        console.log('Non-fatal error handled gracefully');
+        return true;
+      }
+    };
+
+    // Set up global error handling (if available)
+    if (global.ErrorUtils) {
+      global.ErrorUtils.setGlobalHandler(handleError);
+    }
+  }, []);
+
+  // Initialize AdMob
+  React.useEffect(() => {
+    console.log('[ADMOB DEBUG] Starting AdMob initialization...');
+    mobileAds()
+      .initialize()
+      .then(adapterStatuses => {
+        console.log('[ADMOB DEBUG] AdMob initialized successfully:', adapterStatuses);
+        Object.entries(adapterStatuses).forEach(([key, status]) => {
+          console.log(`[ADMOB DEBUG] Adapter ${key}: ${status.state} - ${status.description}`);
+        });
+      })
+      .catch(error => {
+        console.error('[ADMOB DEBUG] AdMob initialization failed:', {
+          message: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+      });
+  }, []);
+
+  return (
+    <ErrorBoundary>
+      <ScrollLockProvider>
+        <AuthProvider>
+          <UnreadMessagesProvider>
+            <AppNavigator />
+          </UnreadMessagesProvider>
+        </AuthProvider>
+      </ScrollLockProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -171,6 +318,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#00BFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Platform.OS === 'ios' ? 30 : 20,
+    marginBottom: Platform.OS === 'ios' ? 10 : 5,
   },
 });

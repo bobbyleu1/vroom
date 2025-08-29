@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform, TextInput, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform, TextInput, ActivityIndicator, ScrollView, Image, Alert } from 'react-native';
 import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
 
 // Import the NativeAdCard component to render ads within the posts list
 import NativeAdCard from '../components/NativeAdCard';
+import ForumPostFormModal from '../components/ForumPostFormModal';
 import { StatusBar } from 'expo-status-bar';
 
 // Import Supabase client
@@ -42,11 +43,12 @@ const ForumsScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [currentCommunity, setCurrentCommunity] = useState(initialCommunityName); // State to manage if we're viewing a specific community
+  const [showCreatePostModal, setShowCreatePostModal] = useState(false);
 
   // Frequency for inserting ads into the posts lists. After every N posts
   // an advertisement will be displayed. Feel free to adjust this value
   // to tune the ad density.
-  const ADS_FREQUENCY = 8;
+  const ADS_FREQUENCY = 10;
 
   /**
    * Helper function to interleave advertisement markers into an array of
@@ -64,8 +66,10 @@ const ForumsScreen = ({ navigation, route }) => {
       result.push(item);
       if ((index + 1) % ADS_FREQUENCY === 0) {
         result.push({ isAd: true });
+        console.log(`ForumsScreen: Inserted ad after item ${index + 1}`);
       }
     });
+    console.log(`ForumsScreen: Total items: ${arr.length}, Result with ads: ${result.length}`);
     return result;
   };
 
@@ -244,6 +248,136 @@ const ForumsScreen = ({ navigation, route }) => {
     };
   }, [searchQuery, performSearch, currentCommunity, fetchInitialExploreData]);
 
+  // Handle upvote/downvote for forum posts
+  const handleVote = async (postId, voteType) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Authentication Required', 'Please log in to vote on posts.');
+        return;
+      }
+
+      // Check current vote status
+      const { data: existingVote, error: voteCheckError } = await supabase
+        .from('forum_votes')
+        .select('vote_type')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (voteCheckError && voteCheckError.code !== 'PGRST116') { // PGRST116 = no rows found
+        console.error('Error checking vote:', voteCheckError);
+        return;
+      }
+
+      let operation;
+      let increment;
+      
+      if (existingVote) {
+        if (existingVote.vote_type === voteType) {
+          // Remove vote if clicking the same vote type
+          await supabase
+            .from('forum_votes')
+            .delete()
+            .eq('post_id', postId)
+            .eq('user_id', user.id);
+          
+          increment = voteType === 'upvote' ? -1 : 1; // Reverse the vote
+          operation = 'removed';
+        } else {
+          // Change vote type
+          await supabase
+            .from('forum_votes')
+            .update({ vote_type: voteType })
+            .eq('post_id', postId)
+            .eq('user_id', user.id);
+          
+          increment = voteType === 'upvote' ? 2 : -2; // Change from down to up or vice versa
+          operation = 'changed';
+        }
+      } else {
+        // Add new vote
+        await supabase
+          .from('forum_votes')
+          .insert({ post_id: postId, user_id: user.id, vote_type: voteType });
+        
+        increment = voteType === 'upvote' ? 1 : -1;
+        operation = 'added';
+      }
+
+      // Update post upvotes count using RPC function
+      const { error: updateError } = await supabase
+        .rpc('increment_forum_post_upvotes', {
+          post_id: postId,
+          increment_by: increment
+        });
+
+      if (updateError) {
+        console.error('Error updating post votes:', updateError);
+        return;
+      }
+
+      // Update local state to reflect the change
+      const updatePosts = (posts) => posts.map(post => 
+        post.id === postId 
+          ? { ...post, upvotes: (post.upvotes || 0) + increment }
+          : post
+      );
+
+      setHotTrendingPosts(prev => updatePosts(prev));
+      setSearchResultsPosts(prev => updatePosts(prev));
+
+      console.log(`Vote ${operation}: ${voteType} on post ${postId}`);
+
+    } catch (error) {
+      console.error('Error handling vote:', error);
+      Alert.alert('Error', 'Failed to update vote. Please try again.');
+    }
+  };
+
+  // Handle "See All" button press to show all posts
+  const handleSeeAllPosts = () => {
+    // Navigate to a dedicated screen or expand the current view
+    // For now, let's set a flag to show more posts or navigate to a new screen
+    // Option 1: Navigate to a dedicated "All Posts" screen (requires creating new screen)
+    // Option 2: Expand current view to show all posts (simpler approach)
+    
+    // Let's use option 2 - fetch and display more posts
+    fetchAllHotTrendingPosts();
+  };
+
+  // Fetch all hot/trending posts (not just the limited preview)
+  const fetchAllHotTrendingPosts = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: postsData, error: postsError } = await supabase
+        .from('forum_posts')
+        .select('*, forum_categories(name), profiles(username)')
+        .order('upvotes', { ascending: false })
+        .limit(50); // Show more posts when "See All" is clicked
+
+      if (postsError) {
+        console.error('Error fetching all hot trending posts:', postsError.message);
+        return;
+      }
+
+      // Format and set the data
+      const formattedPosts = postsData.map(post => ({
+        ...post,
+        community_name: post.forum_categories?.name || 'Unknown',
+        author_username: post.profiles?.username || 'Unknown',
+        created_at_formatted: formatTimeAgo(post.created_at),
+        content_snippet: post.content ? post.content.substring(0, 150) + (post.content.length > 150 ? '...' : '') : null,
+      }));
+
+      setHotTrendingPosts(formattedPosts);
+    } catch (error) {
+      console.error('Error in fetchAllHotTrendingPosts:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Render item for Hot/Trending Posts (and search results posts)
   const renderHotTrendingPostItem = ({ item }) => {
@@ -255,44 +389,73 @@ const ForumsScreen = ({ navigation, route }) => {
       return <NativeAdCard />;
     }
 
+    // Format vote count
+    const formatVotes = (count) => {
+      if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+      return count.toString();
+    };
+
     return (
-      <TouchableOpacity
-        style={styles.postCard}
-        onPress={() => navigation.navigate('ForumPostDetail', { postId: item.id })}
-      >
-        <View style={styles.voteContainer}>
-          <TouchableOpacity onPress={() => console.log('Upvote')}>
-            <AntDesign name="caretup" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <Text style={styles.voteCount}>{item.upvotes}</Text>
-          <TouchableOpacity onPress={() => console.log('Downvote')}>
-            <AntDesign name="caretdown" size={24} color="#FFF" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.postContent}>
-          <View style={styles.postMetaTop}>
-            <Text style={styles.postCommunity}>{item.community_name}</Text>
-            <Text style={styles.postAuthor}>Posted by u/{item.author_username}</Text>
-            <Text style={styles.postTime}>{item.created_at_formatted}</Text>
+      <View style={styles.postCard}>
+        <TouchableOpacity 
+          style={styles.postMainContent}
+          onPress={() => navigation.navigate('ForumPostDetail', { postId: item.id })}
+          activeOpacity={0.95}
+        >
+          <View style={styles.postHeader}>
+            <Text style={styles.postCommunity}>r/{item.community_name}</Text>
+            <Text style={styles.postMeta}>• Posted by u/{item.author_username} • {item.created_at_formatted}</Text>
           </View>
-          <Text style={styles.postTitle}>{item.title}</Text>
-          <Text style={styles.postSnippet}>{item.content_snippet}</Text>
+          
+          <Text style={styles.postTitle} numberOfLines={2}>{item.title}</Text>
+          
+          {item.content_snippet && (
+            <Text style={styles.postSnippet} numberOfLines={3}>{item.content_snippet}</Text>
+          )}
+
+          {/* Thumbnail for media posts */}
+          {item.thumbnail_url && (
+            <Image 
+              source={{ uri: item.thumbnail_url }} 
+              style={styles.postThumbnail}
+              resizeMode="cover"
+            />
+          )}
+          
           <View style={styles.postActions}>
+            <View style={styles.voteSection}>
+              <TouchableOpacity 
+                style={styles.voteButton}
+                onPress={() => handleVote(item.id, 'upvote')}
+              >
+                <AntDesign name="caretup" size={16} color="#878A8C" />
+              </TouchableOpacity>
+              <Text style={styles.voteCount}>{formatVotes(item.upvotes || 0)}</Text>
+              <TouchableOpacity 
+                style={styles.voteButton}
+                onPress={() => handleVote(item.id, 'downvote')}
+              >
+                <AntDesign name="caretdown" size={16} color="#878A8C" />
+              </TouchableOpacity>
+            </View>
+            
             <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="chatbubble-outline" size={18} color="#B0B0B0" />
-              <Text style={styles.actionText}>{item.comment_count} comments</Text>
+              <Ionicons name="chatbubble-outline" size={16} color="#878A8C" />
+              <Text style={styles.actionText}>{item.comment_count || 0}</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity style={styles.actionButton}>
-              <Feather name="share" size={18} color="#B0B0B0" />
+              <Feather name="share" size={16} color="#878A8C" />
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity style={styles.actionButton}>
-              <Feather name="eye" size={18} color="#B0B0B0" />
-              <Text style={styles.actionText}>View</Text>
+              <Feather name="bookmark" size={16} color="#878A8C" />
+              <Text style={styles.actionText}>Save</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -350,7 +513,7 @@ const ForumsScreen = ({ navigation, route }) => {
               {/* Hot/Trending Posts Section */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Hot & Trending Posts</Text>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={handleSeeAllPosts}>
                   <Text style={styles.seeAllText}>See All</Text>
                 </TouchableOpacity>
               </View>
@@ -433,6 +596,29 @@ const ForumsScreen = ({ navigation, route }) => {
           )}
         </ScrollView>
       )}
+      
+      {/* Floating Action Button for creating posts */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowCreatePostModal(true)}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Forum Post Creation Modal */}
+      <ForumPostFormModal
+        visible={showCreatePostModal}
+        onClose={() => setShowCreatePostModal(false)}
+        onSuccess={() => {
+          // Refresh posts after successful creation
+          if (currentCommunity) {
+            fetchPostsForCommunity(currentCommunity);
+          } else {
+            fetchInitialExploreData();
+          }
+        }}
+        communityName={currentCommunity}
+      />
     </SafeAreaView>
   );
 };
@@ -440,7 +626,7 @@ const ForumsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000', // Dark background
+    backgroundColor: '#030303', // Reddit dark background
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   header: {
@@ -520,83 +706,90 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   postCard: {
-    flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 14,
-    marginBottom: 15,
-    shadowColor: '#00BFFF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#00BFFF',
+    backgroundColor: '#1A1A1B',
+    marginBottom: 8,
+    borderRadius: 4,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#343536',
   },
-  voteContainer: {
-    width: 50,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRightWidth: 1,
-    borderRightColor: '#333',
+  postMainContent: {
+    padding: 12,
   },
-  voteCount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginVertical: 5,
-  },
-  postContent: {
-    flex: 1,
-    padding: 15,
-  },
-  postMetaTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
+  postHeader: {
+    marginBottom: 8,
   },
   postCommunity: {
-    fontSize: 13,
-    color: '#B0B0B0',
+    fontSize: 12,
+    color: '#1A73E8',
     fontWeight: 'bold',
-    marginRight: 8,
+    marginBottom: 2,
   },
-  postAuthor: {
-    fontSize: 13,
-    color: '#888',
-    marginRight: 8,
-  },
-  postTime: {
-    fontSize: 13,
-    color: '#888',
+  postMeta: {
+    fontSize: 12,
+    color: '#7C7C7C',
+    flexWrap: 'wrap',
   },
   postTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#E0E0E0',
-    marginBottom: 5,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#D7DADC',
+    marginBottom: 6,
+    lineHeight: 20,
   },
   postSnippet: {
     fontSize: 14,
-    color: '#B0B0B0',
-    marginBottom: 10,
+    color: '#7C7C7C',
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  postThumbnail: {
+    width: 80,
+    height: 60,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
   },
   postActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 5,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#343536',
+  },
+  voteSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#272729',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  voteButton: {
+    padding: 4,
+  },
+  voteCount: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#878A8C',
+    marginHorizontal: 8,
+    minWidth: 20,
+    textAlign: 'center',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
   },
   actionText: {
     fontSize: 12,
-    color: '#B0B0B0',
-    marginLeft: 5,
+    color: '#878A8C',
+    marginLeft: 4,
+    fontWeight: '500',
   },
   myCommunitiesListContainer: {
     paddingHorizontal: 15,
@@ -664,6 +857,22 @@ const styles = StyleSheet.create({
   },
   communityPostsView: {
     flex: 1,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#00BFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
 });
 

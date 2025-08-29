@@ -25,6 +25,7 @@ import PostFormModal from '../components/PostFormModal'; // <--- ADDED THIS IMPO
 import GroupEditModal from '../components/GroupEditModal'; // <--- ADDED GROUP EDIT MODAL IMPORT
 // Import the native ad card to display advertisements within the group posts
 import NativeAdCard from '../components/NativeAdCard';
+import { shareGroup, sharePost } from '../utils/share';
 
 const { width } = Dimensions.get('window');
 
@@ -196,6 +197,7 @@ function GroupDetailScreen() {
 
   const handleGroupEditSuccess = () => {
     // Re-fetch group details after successful update
+    // If group was deleted, the fetch will fail and we should navigate back
     const fetchGroupDetails = async () => {
       try {
         const { data, error } = await supabase
@@ -208,11 +210,20 @@ function GroupDetailScreen() {
           .single();
 
         if (error) {
+          if (error.code === 'PGRST116') {
+            // Group not found - likely deleted
+            console.log('Group was deleted, navigating back');
+            navigation.goBack();
+            return;
+          }
           throw error;
         }
         setGroupData(data);
       } catch (error) {
         console.error('Error refetching group details:', error.message);
+        // If we can't fetch the group, assume it was deleted
+        console.log('Group fetch failed, navigating back');
+        navigation.goBack();
       }
     };
 
@@ -251,9 +262,7 @@ function GroupDetailScreen() {
         if (deleteError) throw deleteError;
         // Decrement upvotes count in group_posts table
         const { error: updateError } = await supabase
-          .from('group_posts')
-          .update({ upvotes: supabase.raw('upvotes - 1') })
-          .eq('id', postId);
+          .rpc('increment_group_post_upvotes', { post_id: postId, increment_by: -1 });
         if (updateError) throw updateError;
       } else {
         // User is liking the post: insert like record and increment upvotes
@@ -263,9 +272,7 @@ function GroupDetailScreen() {
         if (insertError) throw insertError;
         // Increment upvotes count in group_posts table
         const { error: updateError } = await supabase
-          .from('group_posts')
-          .update({ upvotes: supabase.raw('upvotes + 1') })
-          .eq('id', postId);
+          .rpc('increment_group_post_upvotes', { post_id: postId, increment_by: 1 });
         if (updateError) throw updateError;
       }
     } catch (error) {
@@ -358,6 +365,34 @@ function GroupDetailScreen() {
     }
   };
 
+  const handleShareGroup = async () => {
+    if (!groupData) return;
+    
+    try {
+      await shareGroup({
+        id: groupData.id,
+        share_url: groupData.share_url,
+        name: groupData.name
+      });
+    } catch (error) {
+      // Share was cancelled or failed, but URL was copied to clipboard
+      Alert.alert('Link Copied', 'Group link has been copied to your clipboard');
+    }
+  };
+
+  const handleSharePost = async (post) => {
+    try {
+      await sharePost({
+        id: post.id,
+        share_url: post.share_url,
+        title: post.title
+      });
+    } catch (error) {
+      // Share was cancelled or failed, but URL was copied to clipboard
+      Alert.alert('Link Copied', 'Post link has been copied to your clipboard');
+    }
+  };
+
   const renderPostCard = ({ item }) => {
     // When encountering an ad marker, render the native ad card instead of a post
     if (item.isAd) {
@@ -437,7 +472,10 @@ function GroupDetailScreen() {
             <Ionicons name="chatbubble-outline" size={20} color="#B0B0B0" />
             <Text style={styles.actionText}>{item.comment_count || 0}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => handleSharePost(item)}
+          >
             <Ionicons name="share-social-outline" size={20} color="#B0B0B0" />
             <Text style={styles.actionText}>Share</Text>
           </TouchableOpacity>
@@ -522,6 +560,13 @@ function GroupDetailScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{groupData?.name || 'Group'}</Text>
         <View style={styles.headerActions}>
+          {/* Share button */}
+          <TouchableOpacity
+            style={styles.shareGroupButton}
+            onPress={handleShareGroup}
+          >
+            <Ionicons name="share-social-outline" size={20} color="#fff" />
+          </TouchableOpacity>
           {/* Edit button for group owner */}
           {groupData && currentUserId === groupData.creator_id && (
             <TouchableOpacity
@@ -674,6 +719,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  shareGroupButton: {
+    backgroundColor: '#333',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   editGroupButton: {
     backgroundColor: '#333',

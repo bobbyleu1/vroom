@@ -10,9 +10,11 @@ import {
   Image,
   SafeAreaView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { getProfileImageSource } from '../utils/profileHelpers';
 
 // Helper to format updated_at timestamps into relative time strings
 const formatTimeAgo = (timestamp) => {
@@ -38,6 +40,7 @@ const MessagesScreen = () => {
   const navigation = useNavigation();
   const [conversations, setConversations] = useState([]);
   const [userId, setUserId] = useState(null);
+  const { refreshUnreadCount } = useUnreadMessages();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -52,35 +55,103 @@ const MessagesScreen = () => {
     fetchUser();
   }, []);
 
-  const fetchConversations = async (uid) => {
-    const { data, error } = await supabase
-      .from('dm_conversations')
-      .select(`
-        id,
-        user1_id,
-        user2_id,
-        last_message,
-        updated_at,
-        user1: user1_id (username, avatar_url),
-        user2: user2_id (username, avatar_url)
-      `)
-      .or(`user1_id.eq.${uid},user2_id.eq.${uid}`)
-      .order('updated_at', { ascending: false });
+  // Refresh unread counts when this screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshUnreadCount();
+    }, [refreshUnreadCount])
+  );
 
-    if (error) {
-      console.error('Error fetching conversations:', error.message);
-    } else {
-      setConversations(data || []);
+  const fetchConversations = async (uid) => {
+    try {
+      // Get conversations - only select columns that exist
+      const { data, error } = await supabase
+        .from('dm_conversations_with_participants')
+        .select(`
+          id,
+          user1_id,
+          user2_id,
+          user1_username,
+          user2_username,
+          last_message,
+          updated_at
+        `)
+        .or(`user1_id.eq.${uid},user2_id.eq.${uid}`)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching conversations:', error.message);
+        return;
+      }
+
+      // Transform data to include other user info and manually calculate unread counts
+      const transformedData = await Promise.all(data.map(async (conversation) => {
+        const isUser1 = conversation.user1_id === uid;
+        const otherUserId = isUser1 ? conversation.user2_id : conversation.user1_id;
+        const otherUsername = isUser1 ? conversation.user2_username : conversation.user1_username;
+
+        // Fetch avatar for the other user
+        let otherUserAvatar = null;
+        try {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', otherUserId)
+            .single();
+          
+          otherUserAvatar = profileData?.avatar_url || null;
+        } catch (avatarError) {
+          console.warn('Could not fetch avatar for user:', otherUserId, avatarError.message);
+        }
+
+        const otherUser = {
+          id: otherUserId,
+          username: otherUsername,
+          avatar_url: otherUserAvatar
+        };
+
+        // Calculate unread count for this conversation
+        let unread_count = 0;
+        try {
+          const { count, error: unreadError } = await supabase
+            .from('dm_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('conversation_id', conversation.id)
+            .neq('sender_id', uid)
+            .eq('is_read', false);
+          
+          if (unreadError) {
+            console.warn('Unread count query error for conversation:', conversation.id, unreadError);
+            unread_count = 0; // Fallback to 0
+          } else {
+            unread_count = count || 0;
+          }
+        } catch (unreadError) {
+          console.warn('Could not fetch unread count for conversation:', conversation.id, unreadError.message);
+          unread_count = 0; // Fallback to 0
+        }
+
+        return {
+          ...conversation,
+          otherUser,
+          unread_count
+        };
+      }));
+
+      setConversations(transformedData);
+    } catch (error) {
+      console.error('Error in fetchConversations:', error.message);
     }
   };
 
   const renderItem = ({ item }) => {
-    const otherUser = item.user1_id === userId ? item.user2 : item.user1;
+    const { otherUser } = item;
     const previewTime = formatTimeAgo(item.updated_at);
+    const hasUnread = item.unread_count > 0;
 
     return (
       <TouchableOpacity
-        style={styles.chatItem}
+        style={[styles.chatItem, hasUnread && styles.unreadChatItem]}
         onPress={() =>
           navigation.navigate('ChatScreen', {
             conversationId: item.id,
@@ -88,21 +159,27 @@ const MessagesScreen = () => {
           })
         }
       >
-        <Image
-          source={
-            otherUser.avatar_url
-              ? { uri: otherUser.avatar_url }
-              : require('../assets/avatar_placeholder.png')
-          }
-          style={styles.avatar}
-        />
+        <View style={styles.avatarContainer}>
+          <Image
+            source={getProfileImageSource(otherUser.avatar_url)}
+            style={styles.avatar}
+          />
+          {hasUnread && <View style={styles.unreadBadge} />}
+        </View>
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
-            <Text style={styles.username}>@{otherUser.username}</Text>
-            <Text style={styles.timeText}>{previewTime}</Text>
+            <Text style={[styles.username, hasUnread && styles.unreadUsername]}>@{otherUser.username}</Text>
+            <View style={styles.timeContainer}>
+              <Text style={styles.timeText}>{previewTime}</Text>
+              {hasUnread && (
+                <View style={styles.unreadCountBadge}>
+                  <Text style={styles.unreadCountText}>{item.unread_count}</Text>
+                </View>
+              )}
+            </View>
           </View>
-          <Text style={styles.previewText} numberOfLines={1}>
-            {item.last_message || 'No messages yet'}
+          <Text style={[styles.previewText, hasUnread && styles.unreadPreviewText]} numberOfLines={1}>
+            {item.last_message || 'Start a conversation...'}
           </Text>
         </View>
       </TouchableOpacity>
@@ -159,15 +236,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 8,
     borderBottomColor: '#111',
     borderBottomWidth: 1,
+    borderRadius: 8,
+  },
+  unreadChatItem: {
+    backgroundColor: '#0A0A0A',
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
   },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    marginRight: 12,
     backgroundColor: '#333',
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#00BFFF',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   chatInfo: {
     flex: 1,
@@ -177,19 +273,44 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   username: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
+  unreadUsername: {
+    fontWeight: '700',
+  },
   timeText: {
     color: '#666',
     fontSize: 12,
+  },
+  unreadCountBadge: {
+    backgroundColor: '#00BFFF',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 6,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  unreadCountText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   previewText: {
     color: '#AAA',
     fontSize: 14,
     marginTop: 4,
+  },
+  unreadPreviewText: {
+    color: '#CCC',
+    fontWeight: '500',
   },
   emptyText: {
     textAlign: 'center',

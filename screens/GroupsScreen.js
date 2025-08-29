@@ -55,45 +55,33 @@ function GroupsScreen() {
     return result;
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      const fetchInitialData = async () => {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError) {
-          console.error("Error fetching user session:", userError.message);
-          // Only show alert if there's an actual error, not just no user
-          if (userError.message !== 'Auth session not found') {
-            Alert.alert("Error", "Could not fetch user session: " + userError.message);
-          }
-          setCurrentUserId(null);
-          setLoading(false);
-          return;
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error("Error fetching user session:", userError.message);
+        if (userError.message !== 'Auth session not found') {
+          Alert.alert("Error", "Could not fetch user session: " + userError.message);
         }
-
-        if (user) {
-          setCurrentUserId(user.id);
-        } else {
-          setCurrentUserId(null);
-          if (activeTab === 'My Groups') {
-            setGroups([]);
-            setLoading(false);
-            return;
-          }
-        }
-      };
-      fetchInitialData();
-
-      // Only fetch groups once currentUserId has been properly determined (null or ID)
-      // We check if it's not 'undefined' (initial state) to ensure the effect has run once
-      if (currentUserId !== undefined) {
-         fetchGroups();
+        setCurrentUserId(null);
+        setLoading(false);
+        return;
       }
 
-      return () => {
-        // Cleanup if needed (e.g., unsubscribe from real-time listeners)
-      };
-    }, [currentUserId, activeTab, searchQuery])
-  );
+      if (user) {
+        setCurrentUserId(user.id);
+      } else {
+        setCurrentUserId(null);
+      }
+    };
+    fetchInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (currentUserId !== undefined) {
+      fetchGroups();
+    }
+  }, [currentUserId, activeTab, searchQuery]);
 
   const fetchGroups = async () => {
     setLoading(true);

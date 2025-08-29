@@ -133,6 +133,104 @@ const GroupEditModal = ({ visible, onClose, groupData, onSuccess }) => {
     }
   };
 
+  const handleDeleteGroup = async () => {
+    Alert.alert(
+      'Delete Group',
+      'Are you sure you want to delete this group? This action cannot be undone. All posts, comments, and member data will be permanently lost.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              // Check current authentication state
+              console.log('=== Starting group deletion ===');
+              console.log('Checking authentication state...');
+              const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+              console.log('Session check:', { 
+                hasSession: !!session, 
+                sessionUserId: session?.user?.id,
+                sessionError: sessionError?.message 
+              });
+              
+              if (!session || !session.user) {
+                Alert.alert('Authentication Required', 'You must be logged in to delete a group.');
+                setLoading(false);
+                return;
+              }
+
+              const user = session.user;
+              
+              // Check if user is the group creator
+              console.log('Group ID:', groupData.id);
+              console.log('User ID:', user.id);
+              console.log('Group creator_id:', groupData.creator_id);
+              
+              if (user.id !== groupData?.creator_id) {
+                Alert.alert('Permission Denied', 'You can only delete groups that you created.');
+                setLoading(false);
+                return;
+              }
+
+              // Delete the group - this should cascade delete all related data
+              console.log('Attempting to delete group with ID:', groupData.id);
+              console.log('Current user ID:', user.id);
+              console.log('Group creator ID:', groupData.creator_id);
+              
+              // First, let's check if we can actually see this group
+              const { data: groupCheck, error: groupCheckError } = await supabase
+                .from('groups')
+                .select('*')
+                .eq('id', groupData.id)
+                .single();
+
+              console.log('Group check result:', { groupCheck, groupCheckError });
+
+              const { error: deleteError, data } = await supabase
+                .from('groups')
+                .delete()
+                .eq('id', groupData.id)
+                .select();
+
+              console.log('Delete result:', { error: deleteError, data });
+              console.log('Delete result data length:', data?.length);
+
+              if (deleteError) {
+                console.error('Group deletion failed:', deleteError);
+                console.error('Delete error code:', deleteError.code);
+                console.error('Delete error message:', deleteError.message);
+                console.error('Delete error hint:', deleteError.hint);
+                throw deleteError;
+              }
+
+              if (!data || data.length === 0) {
+                console.warn('Delete query returned no data - this might indicate the group was not actually deleted');
+                Alert.alert('Warning', 'Delete operation completed but no rows were affected. The group may not have been deleted.');
+                return;
+              }
+
+              console.log('Group successfully deleted:', data[0]);
+              Alert.alert('Success', 'Group deleted successfully!');
+              resetForm();
+              onSuccess();
+              onClose();
+            } catch (error) {
+              console.error('Error deleting group:', error.message);
+              Alert.alert('Delete Error', 'Failed to delete group: ' + error.message);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert('Missing Name', 'Please enter a name for your group.');
@@ -350,6 +448,22 @@ const GroupEditModal = ({ visible, onClose, groupData, onSuccess }) => {
               </View>
             </View>
 
+            {/* Danger Zone */}
+            <View style={styles.dangerZone}>
+              <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+              <Text style={styles.dangerZoneDescription}>
+                Deleting a group is permanent and cannot be undone. All posts, comments, and member data will be lost.
+              </Text>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={handleDeleteGroup}
+                disabled={loading}
+              >
+                <Ionicons name="trash" size={20} color="#fff" />
+                <Text style={styles.deleteButtonText}>Delete Group</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Submit Button */}
             <TouchableOpacity
               style={[styles.submitButton, loading && styles.disabledButton]}
@@ -509,6 +623,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  dangerZone: {
+    marginBottom: 30,
+    padding: 15,
+    backgroundColor: '#2A0A0A',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF4444',
+  },
+  dangerZoneTitle: {
+    color: '#FF4444',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  dangerZoneDescription: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 15,
+  },
+  deleteButton: {
+    backgroundColor: '#FF4444',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 

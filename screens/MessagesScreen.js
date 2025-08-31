@@ -190,6 +190,9 @@ const MessagesScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={28} color="#00BFFF" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Messages</Text>
         <TouchableOpacity onPress={() => navigation.navigate('NewMessageScreen')}>
           <Ionicons name="create-outline" size={28} color="#00BFFF" />
@@ -224,10 +227,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  backButton: {
+    padding: 4,
+  },
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#FFF',
+    flex: 1,
+    textAlign: 'center',
   },
   list: {
     padding: 15,

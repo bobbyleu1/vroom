@@ -7,7 +7,7 @@ import app from '../package.json';
 // const MuxVideo = muxReactNativeVideo(Video);
 const MuxVideo = Video; // Use plain Video component
 
-export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, postId, userId, muxOptions, posterSource, onLoad, onBuffer, onProgress, onError, onVideoLoadStart, ...props }, ref) => {
+export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, postId, userId, muxOptions, posterSource, resizeMode = "cover", onLoad, onBuffer, onProgress, onError, onVideoLoadStart, ...props }, ref) => {
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -82,7 +82,7 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
       poster={posterSource || undefined} // Only set poster if we have a valid URL
       muted
       repeat
-      resizeMode="cover"
+      resizeMode={resizeMode}
       // Optimized buffer settings for instant playback on mobile
       bufferConfig={{
         minBufferMs: 2500, // 2.5 seconds minimum buffer (much faster)

@@ -36,6 +36,8 @@ import ChatScreen from './screens/ChatScreen';
 import UserProfileScreen from './screens/UserProfileScreen';
 import UserPostsFeedScreen from './screens/UserPostsFeedScreen';
 import SearchScreen from './screens/SearchScreen';
+import FollowersListScreen from './screens/FollowersListScreen';
+import FollowingListScreen from './screens/FollowingListScreen';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ScrollLockProvider } from './contexts/ScrollLockContext';
@@ -237,6 +239,20 @@ function AppNavigator() {
               options={{
                 headerShown: false,
                 presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="FollowersList"
+              component={FollowersListScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="FollowingList"
+              component={FollowingListScreen}
+              options={{
+                headerShown: false,
               }}
             />
           </>

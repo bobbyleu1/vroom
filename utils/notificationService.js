@@ -27,34 +27,80 @@ export async function registerForPushNotificationsAsync() {
     });
   }
 
+  // Enhanced device and permission checking
+  console.log('Device.isDevice:', Device.isDevice);
+  console.log('Platform.OS:', Platform.OS);
+  
   if (Device.isDevice) {
+    console.log('Physical device detected - proceeding with push token registration...');
+    
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    console.log('Current permission status:', existingStatus);
     let finalStatus = existingStatus;
     
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      console.log('Requesting push notification permissions...');
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowDisplayInCarPlay: false,
+          allowCriticalAlerts: false,
+          provideAppNotificationSettings: false,
+          allowProvisional: false,
+          allowAnnouncements: false,
+        },
+      });
       finalStatus = status;
+      console.log('Permission request result:', finalStatus);
     }
     
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
+      console.error('Push notification permission denied by user');
+      console.error('Final status:', finalStatus);
       return null;
     }
     
+    console.log('Push notification permissions granted - getting token...');
+    
     try {
       console.log('Attempting to get Expo push token...');
+      console.log('Project ID:', '49513f8d-d50b-4469-b988-bf9caf4409ae');
+      
       const tokenResult = await Notifications.getExpoPushTokenAsync({
-        projectId: '49513f8d-d50b-4469-b988-bf9caf4409ae', // Your Expo project ID
+        projectId: '49513f8d-d50b-4469-b988-bf9caf4409ae',
       });
+      
       token = tokenResult.data;
-      console.log('Successfully received push token:', token);
+      console.log('✅ Successfully received push token:', token);
+      console.log('Token length:', token?.length);
+      console.log('Token starts with:', token?.substring(0, 20) + '...');
+      
+      // Verify token format
+      if (!token || !token.startsWith('ExponentPushToken[')) {
+        console.error('❌ Invalid token format received:', token);
+        return null;
+      }
+      
     } catch (error) {
-      console.error('Error getting push token:', error);
-      console.error('Error details:', error.message, error.code);
+      console.error('❌ Error getting push token:', error);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      console.error('Error stack:', error.stack);
+      
+      // Provide specific guidance based on error
+      if (error.code === 'DEVICE_NOT_REGISTERED') {
+        console.error('📱 Device not registered with APNs - this can happen in TestFlight');
+      } else if (error.code === 'INVALID_PROJECT_ID') {
+        console.error('🚫 Invalid Expo project ID');
+      }
+      
       return null;
     }
   } else {
-    console.log('Must use physical device for Push Notifications');
+    console.log('⚠️  Must use physical device for Push Notifications (currently on simulator)');
+    console.log('Environment:', __DEV__ ? 'Development' : 'Production');
     return null;
   }
 
@@ -111,9 +157,38 @@ export async function savePushTokenToProfile(token) {
         console.error('CRITICAL: push_token column does not exist in profiles table!');
         console.error('Please run: ALTER TABLE profiles ADD COLUMN push_token TEXT;');
       }
+      return false;
     } else {
-      console.log('Push token saved successfully for user:', user.id);
+      console.log('✅ Push token saved successfully for user:', user.id);
       console.log('Token length:', token.length);
+      
+      // Verify the token was actually saved by reading it back
+      console.log('🔍 Verifying token was saved correctly...');
+      try {
+        const { data: verifyProfile, error: verifyError } = await supabase
+          .from('profiles')
+          .select('push_token')
+          .eq('id', user.id)
+          .single();
+          
+        if (verifyError) {
+          console.error('❌ Error verifying saved token:', verifyError);
+          return false;
+        }
+        
+        if (verifyProfile?.push_token === token) {
+          console.log('✅ Token verification successful - token matches in database');
+          return true;
+        } else {
+          console.error('❌ Token verification failed - database token does not match');
+          console.error('Expected:', token);
+          console.error('Found:', verifyProfile?.push_token);
+          return false;
+        }
+      } catch (verifyException) {
+        console.error('❌ Exception during token verification:', verifyException);
+        return false;
+      }
     }
   } catch (error) {
     console.error('Exception saving push token:', error);
@@ -132,8 +207,14 @@ export async function initializePushNotifications() {
     const token = await registerForPushNotificationsAsync();
     if (token) {
       console.log('Push token received, saving to profile...');
-      await savePushTokenToProfile(token);
-      console.log('===== Push notifications initialized successfully =====');
+      const saveSuccess = await savePushTokenToProfile(token);
+      if (saveSuccess) {
+        console.log('===== Push notifications initialized successfully =====');
+        return token;
+      } else {
+        console.log('===== Push token received but failed to save to database =====');
+        return null;
+      }
     } else {
       console.log('===== No push token received, initialization failed =====');
     }

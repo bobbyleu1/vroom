@@ -28,6 +28,7 @@ function FriendsScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   useEffect(() => {
     const fetchFriendsVideos = async () => {
@@ -41,6 +42,7 @@ function FriendsScreen({ navigation }) {
         } = await supabase.auth.getUser();
         console.log('FriendsScreen: Got user:', user?.id);
         if (user) {
+          setCurrentUserId(user.id);
           // Users the current user is following
           const { data: followingData, error: followingError } = await supabase
             .from('user_follows')
@@ -165,6 +167,7 @@ function FriendsScreen({ navigation }) {
             index={index}
             currentVideoIndex={currentVideoIndex}
             navigation={navigation}
+            currentUserId={currentUserId}
           />
         )
       }

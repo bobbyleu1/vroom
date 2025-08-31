@@ -148,6 +148,6 @@ function getNotificationTitle(type: string): string {
     case 'forum_like':
       return 'Forum Like! ❤️'
     default:
-      return 'Vroom Notification! 🚗'
+      return 'Vroom Social Notification! 🚗'
   }
 }

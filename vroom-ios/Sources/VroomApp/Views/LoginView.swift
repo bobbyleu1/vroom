@@ -12,7 +12,7 @@ struct LoginView: View {
             
             VStack(spacing: 30) {
                 // Logo/Title
-                Text("Vroom")
+                Text("Vroom Social")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.blue)

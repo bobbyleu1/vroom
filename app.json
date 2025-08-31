@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "vroom-mobile",
+    "name": "Vroom Social",
     "slug": "vroom-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -32,7 +32,7 @@
         ]
       },
       "entitlements": {
-        "aps-environment": "development"
+        "aps-environment": "production"
       },
       "appleTeamId": "Y9LC8G72Z7"
     },
@@ -83,7 +83,7 @@
           "icon": "./assets/notification-icon.png",
           "color": "#00BFFF",
           "sounds": [],
-          "mode": "development"
+          "mode": "production"
         }
       ],
       [

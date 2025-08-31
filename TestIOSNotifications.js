@@ -160,7 +160,7 @@ export default function TestIOSNotifications() {
         to: currentToken,
         sound: 'default',
         title: 'iOS Test Notification 📱',
-        body: 'This is a test from your Vroom app!',
+        body: 'This is a test from your Vroom Social app!',
         data: { 
           type: 'test',
           timestamp: new Date().toISOString()

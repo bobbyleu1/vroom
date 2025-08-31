@@ -66,7 +66,7 @@ export default function OnboardingWelcomeScreen({ navigation }) {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.logoRow}>
-              <Text style={styles.logoText}>Welcome to Vroom</Text>
+              <Text style={styles.logoText}>Welcome to Vroom Social</Text>
               <Ionicons name="car-sport" size={32} color="#00BFFF" style={{ marginLeft: 8 }} />
             </View>
             <Text style={styles.subtitleText}>Tell us about yourself</Text>

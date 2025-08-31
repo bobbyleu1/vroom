@@ -18,6 +18,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 // import { uploadMedia } from '../lib/storage.js';
 import { uploadMedia } from '../utils/mediaUpload.js';
+import { uploadVideoToMux } from '../utils/uploadToMux';
 import { supabase } from '../utils/supabase.js';
 import { MAX_VIDEO_DURATION_S } from '../config/media';
 import { getPickedVideoMeta, ensureMax60s } from '../utils/videoMeta';
@@ -117,41 +118,138 @@ export default function PostPreviewScreen() {
         }
       }
 
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return prev + Math.random() * 20;
-        });
-      }, 500);
-
-      const uploadResult = await uploadMedia(finalMediaUri, user.id, mediaType === 'video' ? 'video' : 'image');
-
-      console.log('Upload result:', uploadResult);
-      console.log('Media URL:', uploadResult.mediaUrl);
-
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
       const hashtags = extractHashtags(caption);
 
-      const { data: postData, error: postError } = await supabase
-        .from('posts')
-        .insert({
-          author_id: user.id,
-          content: caption.trim(),
-          media_url: uploadResult.mediaUrl,
-          thumbnail_url: uploadResult.thumbnailUrl,
-          file_type: mediaType === 'video' ? 'video' : 'image',
-        })
-        .select()
-        .single();
+      let postData;
+      
+      if (mediaType === 'video') {
+        console.log('Creating video post for Mux processing...');
+        
+        // For videos: Create post first, then upload to Mux
+        const { data: newPostData, error: postError } = await supabase
+          .from('posts')
+          .insert({
+            author_id: user.id,
+            content: caption.trim(),
+            file_type: 'video',
+            mux_status: 'pending' // Indicate we're about to start Mux processing
+          })
+          .select()
+          .single();
 
-      if (postError) {
-        throw postError;
+        if (postError) {
+          throw postError;
+        }
+
+        postData = newPostData;
+        console.log('Post created, starting Mux upload for post:', postData.id);
+
+        // Simulate upload progress for UI
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            if (prev >= 90) {
+              clearInterval(progressInterval);
+              return prev;
+            }
+            return prev + Math.random() * 15;
+          });
+        }, 500);
+
+        try {
+          // Get user session for Mux upload
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          // Upload video to Mux
+          await uploadVideoToMux({
+            fileUri: finalMediaUri,
+            supabaseUrl: 'https://rafyqmwbbagsdugwjaxx.supabase.co',
+            accessToken: session.access_token,
+            postId: postData.id,
+            userId: user.id,
+          });
+
+          clearInterval(progressInterval);
+          setUploadProgress(100);
+
+          console.log('Video uploaded to Mux successfully');
+          
+          // Update post status to indicate upload completed
+          await supabase
+            .from('posts')
+            .update({ mux_status: 'uploaded' })
+            .eq('id', postData.id);
+
+        } catch (muxError) {
+          clearInterval(progressInterval);
+          console.error('Mux upload failed, falling back to Supabase storage:', muxError);
+          
+          // Fallback: Upload to Supabase storage
+          const progressInterval2 = setInterval(() => {
+            setUploadProgress(prev => {
+              if (prev >= 90) {
+                clearInterval(progressInterval2);
+                return prev;
+              }
+              return prev + Math.random() * 15;
+            });
+          }, 500);
+          
+          const uploadResult = await uploadMedia(finalMediaUri, user.id, 'video');
+          
+          clearInterval(progressInterval2);
+          setUploadProgress(100);
+          
+          // Update post with Supabase storage URLs
+          await supabase
+            .from('posts')
+            .update({
+              media_url: uploadResult.mediaUrl,
+              thumbnail_url: uploadResult.thumbnailUrl,
+              mux_status: 'fallback_storage'
+            })
+            .eq('id', postData.id);
+          
+          console.log('Fallback upload to Supabase storage completed');
+        }
+        
+      } else {
+        console.log('Creating image post with Supabase storage...');
+        
+        // For images: Use existing Supabase storage workflow
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            if (prev >= 90) {
+              clearInterval(progressInterval);
+              return prev;
+            }
+            return prev + Math.random() * 20;
+          });
+        }, 500);
+
+        const uploadResult = await uploadMedia(finalMediaUri, user.id, 'image');
+
+        console.log('Image upload result:', uploadResult);
+
+        clearInterval(progressInterval);
+        setUploadProgress(100);
+
+        const { data: newPostData, error: postError } = await supabase
+          .from('posts')
+          .insert({
+            author_id: user.id,
+            content: caption.trim(),
+            media_url: uploadResult.mediaUrl,
+            thumbnail_url: uploadResult.thumbnailUrl,
+            file_type: 'image',
+          })
+          .select()
+          .single();
+
+        if (postError) {
+          throw postError;
+        }
+
+        postData = newPostData;
       }
 
       // Save hashtags if any were found
@@ -265,13 +363,13 @@ export default function PostPreviewScreen() {
               ref={videoRef}
               source={{ uri: mediaUri }}
               style={styles.media}
-              resizeMode="cover"
+              resizeMode="contain"
               isLooping
               shouldPlay
               isMuted={false}
             />
           ) : (
-            <Image source={{ uri: mediaUri }} style={styles.media} />
+            <Image source={{ uri: mediaUri }} style={styles.media} resizeMode="contain" />
           )}
         </View>
 

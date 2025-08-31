@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons'; // For back button
 const { height: windowHeight } = Dimensions.get('window');
 
 function UserPostsFeedScreen({ route, navigation }) {
-  const { userId, initialPostIndex = 0, postsData = null, sourceTab = 'posts' } = route.params; // Get userId and initial index
+  const { userId, initialPostIndex = 0, postsData = null, sourceTab = 'posts', openComments = false } = route.params; // Get userId and initial index
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(initialPostIndex);
@@ -153,6 +153,7 @@ function UserPostsFeedScreen({ route, navigation }) {
             currentVideoIndex={currentVideoIndex}
             navigation={navigation}
             currentUserId={currentUserId}
+            shouldOpenComments={openComments && index === initialPostIndex}
             onPostDeleted={(deletedPostId) => {
               setPosts(prevPosts => prevPosts.filter(post => post.id !== deletedPostId));
             }}

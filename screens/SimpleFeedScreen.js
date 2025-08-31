@@ -46,7 +46,7 @@ function SimpleFeedScreen() {
   useEffect(() => {
     if (global.registerFeedRefresh && refreshFeed) {
       global.registerFeedRefresh(refreshFeed);
-      console.log('Feed refresh callback registered');
+      console.log('[SIMPLE FEED] Feed refresh callback registered for double-tap');
     }
     
     return () => {
@@ -57,16 +57,14 @@ function SimpleFeedScreen() {
     };
   }, [refreshFeed]);
 
-  // Refresh feed when screen comes into focus (e.g., after posting)
-  useFocusEffect(
-    useCallback(() => {
-      if (currentUserId && posts.length > 0) {
-        // Only refresh if we already have posts loaded to avoid unnecessary loading
-        console.log('[SIMPLE FEED] Screen focused - refreshing feed');
-        refreshFeed();
-      }
-    }, [currentUserId, posts.length, refreshFeed])
-  );
+  // Focus-based refresh disabled to prevent interruptions during scrolling
+  // Users can still refresh manually via pull-to-refresh or double-tap feed button
+  // const lastFocusTime = useRef(Date.now());
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     // Focus-based refresh logic disabled
+  //   }, [])
+  // );
 
   // Load initial feed with faster loading and optimistic loading
   const loadFeed = useCallback(async () => {
@@ -74,7 +72,7 @@ function SimpleFeedScreen() {
     
     try {
       // Start loading immediately without setting loading state first to avoid black screen
-      const result = await VroomFeedManager.getFeed(currentUserId, 20); // Start with smaller batch for faster initial load
+      const result = await VroomFeedManager.getFeed(currentUserId, 10); // TikTok-style: Start with just 10 videos
       
       if (!result.error && result.posts && result.posts.length > 0) {
         const contentPosts = result.posts.filter(item => item.type !== 'ad');
@@ -83,33 +81,9 @@ function SimpleFeedScreen() {
         setHasMore(result.hasMore);
         setLoading(false); // Only set loading to false after we have content
         
-        // Trigger initial aggressive preloading using a separate effect
+        // TikTok-style: Light preload only when needed, not immediately
         if (result.hasMore && contentPosts.length > 0) {
-          console.log('[SIMPLE FEED] Scheduling initial preload...');
-          setTimeout(async () => {
-            console.log('[SIMPLE FEED] Starting initial background preload...');
-            try {
-              const preloadResult = await VroomFeedManager.getFeed(
-                currentUserId,
-                40, // Large batch for preloading
-                contentPosts[contentPosts.length - 1]?.id
-              );
-              
-              if (!preloadResult.error && preloadResult.posts && preloadResult.posts.length > 0) {
-                const newContentPosts = preloadResult.posts.filter(item => item.type !== 'ad');
-                const existingPostIds = new Set(contentPosts.map(p => p.id));
-                const uniqueNewPosts = newContentPosts.filter(post => !existingPostIds.has(post.id));
-                
-                if (uniqueNewPosts.length > 0) {
-                  console.log(`[SIMPLE FEED] Initial preload complete: ${uniqueNewPosts.length} posts ready`);
-                  setPreloadQueue(uniqueNewPosts);
-                  setHasMore(preloadResult.hasMore);
-                }
-              }
-            } catch (error) {
-              console.error('[SIMPLE FEED] Error in initial preload:', error);
-            }
-          }, 2000);
+          console.log('[SIMPLE FEED] Initial load complete - will preload on scroll');
         }
       } else {
         setLoading(false);
@@ -150,7 +124,7 @@ function SimpleFeedScreen() {
     
     const result = await VroomFeedManager.getFeed(
       currentUserId, 
-      30, // Larger batch size for smoother scrolling
+      15, // TikTok-style: Medium batch size for smooth loading
       lastPost?.id
     );
     
@@ -164,6 +138,12 @@ function SimpleFeedScreen() {
         // Deduplicate posts to prevent duplicate keys
         const existingPostIds = new Set(posts.map(p => p.id));
         const newContentPosts = contentPosts.filter(post => !existingPostIds.has(post.id));
+        
+        // Log if we're filtering out duplicates
+        const duplicatesFiltered = contentPosts.length - newContentPosts.length;
+        if (duplicatesFiltered > 0) {
+          console.warn(`[SIMPLE FEED] 🔄 Filtered out ${duplicatesFiltered} duplicate posts - feed is repeating!`);
+        }
         
         // Deduplicate all items (posts + ads)
         const existingItemIds = new Set(items.map(item => item.id || item.adId));
@@ -196,7 +176,8 @@ function SimpleFeedScreen() {
           console.log('[SIMPLE FEED] No new unique content to add');
         }
         
-        setHasMore(true); // Always keep hasMore true for endless feed
+        // Always keep infinite scroll - TikTok never ends
+        setHasMore(true);
       }
     } else {
       console.error('[SIMPLE FEED] Error loading more posts:', result.error);
@@ -208,7 +189,7 @@ function SimpleFeedScreen() {
   // Refresh feed with random nonce to ensure fresh content
   const refreshFeed = useCallback(async () => {
     const refreshNonce = Date.now(); // Unique identifier for this refresh
-    console.log(`[SIMPLE FEED] refreshFeed called - nonce: ${refreshNonce}, refreshing: ${refreshing}, currentUserId: ${currentUserId}`);
+    console.log(`[SIMPLE FEED] 🔄 REFRESH FEED CALLED - nonce: ${refreshNonce}, refreshing: ${refreshing}, currentUserId: ${currentUserId}`);
     
     if (refreshing || !currentUserId) {
       console.log(`[SIMPLE FEED] refreshFeed blocked - refreshing: ${refreshing}, currentUserId: ${currentUserId}`);
@@ -221,7 +202,7 @@ function SimpleFeedScreen() {
     // Clear preload queue to force fresh content
     setPreloadQueue([]);
     
-    const result = await VroomFeedManager.refreshFeed(currentUserId, 50);
+    const result = await VroomFeedManager.refreshFeed(currentUserId, 15); // TikTok-style: Smaller refresh batch
     
     if (!result.error && result.posts) {
       const contentPosts = result.posts.filter(item => item.type !== 'ad');
@@ -285,7 +266,7 @@ function SimpleFeedScreen() {
       const lastPost = posts[posts.length - 1];
       const preloadResult = await VroomFeedManager.getFeed(
         currentUserId,
-        40, // Larger batch for better preloading
+        15, // TikTok-style: Keep preload batches small and frequent
         lastPost?.id
       );
       
@@ -307,13 +288,13 @@ function SimpleFeedScreen() {
     }
   }, [currentUserId, isPreloading, hasMore, posts]);
 
-  // Enhanced scroll handler for aggressive preloading
+  // TikTok-style scroll handler for smooth loading
   const handleScroll = useCallback((event) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     const distanceFromEnd = contentSize.height - layoutMeasurement.height - contentOffset.y;
     
-    // Start preloading when user is still 2 screen heights away from the end
-    const preloadTriggerDistance = layoutMeasurement.height * 2;
+    // TikTok-style: Trigger closer to the end for smoother experience
+    const preloadTriggerDistance = layoutMeasurement.height * 1.5; // Reduced from 2x to 1.5x
     
     // Only trigger preloading if conditions are met
     if (distanceFromEnd < preloadTriggerDistance && !isPreloading && hasMore) {
@@ -359,8 +340,8 @@ function SimpleFeedScreen() {
         const currentIndex = firstVisibleItem.index;
         const remainingItems = totalItems - currentIndex;
         
-        // Trigger preloading when user is getting close to the end
-        if (remainingItems <= 10 && !isPreloading && hasMore && preloadQueue.length === 0) {
+        // Reduce preload aggressiveness to avoid network timeouts
+        if (remainingItems <= 3 && !isPreloading && hasMore && preloadQueue.length === 0) {
           console.log(`[SIMPLE FEED] Triggering preload - ${remainingItems} items remaining`);
           preloadContent();
         }
@@ -371,8 +352,8 @@ function SimpleFeedScreen() {
           trackPostAsSeen(item);
         }
         
-        // If less than 10 items remaining, also trigger loadMore for fallback
-        if (remainingItems <= 10 && !loading && hasMore) {
+        // Reduce fallback trigger to avoid network overload
+        if (remainingItems <= 3 && !loading && hasMore) {
           console.log('[SIMPLE FEED] Also triggering loadMore fallback - remaining items:', remainingItems);
           loadMore();
         }
@@ -468,16 +449,16 @@ function SimpleFeedScreen() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onEndReached={onEndReached}
-        onEndReachedThreshold={0.3}
+        onEndReachedThreshold={0.5}
         onScroll={handleScroll}
-        scrollEventThrottle={200}
+        scrollEventThrottle={500}
         getItemLayout={getItemLayout}
         ListFooterComponent={renderFooter}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
+        maxToRenderPerBatch={2}
         updateCellsBatchingPeriod={100}
-        initialNumToRender={3}
-        windowSize={5}
+        initialNumToRender={1}
+        windowSize={2}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

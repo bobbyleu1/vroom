@@ -138,7 +138,7 @@ export default function OnboardingProfilePictureScreen({ route, navigation }) {
       }
 
       Alert.alert(
-        'Welcome to Vroom!',
+        'Welcome to Vroom Social!',
         'Your account has been created successfully. Check your email to confirm your account.',
         [
           {

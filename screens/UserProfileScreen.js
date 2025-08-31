@@ -246,6 +246,7 @@ function UserProfileScreen({ route, navigation }) {
         <Image 
           source={imageSource} 
           style={styles.postImage}
+          resizeMode="cover"
           onError={(error) => {
             console.log(`UserProfileScreen: Error loading thumbnail for post ${item.id}:`, error.nativeEvent.error);
             // Handle different fallback scenarios for videos
@@ -330,14 +331,34 @@ function UserProfileScreen({ route, navigation }) {
               <Text style={styles.statNumber}>{formatCount(posts.length)}</Text>
               <Text style={styles.statLabel}>Posts</Text>
             </View>
-            <View style={styles.statBox}>
+            <TouchableOpacity 
+              style={styles.statBox}
+              onPress={() => {
+                console.log('Followers TouchableOpacity pressed!');
+                navigation.push('FollowersList', { 
+                  userId: userId, 
+                  username: profile?.username 
+                });
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={styles.statNumber}>{formatCount(followers)}</Text>
               <Text style={styles.statLabel}>Followers</Text>
-            </View>
-            <View style={styles.statBox}>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.statBox}
+              onPress={() => {
+                console.log('Following TouchableOpacity pressed!');
+                navigation.push('FollowingList', { 
+                  userId: userId, 
+                  username: profile?.username 
+                });
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={styles.statNumber}>{formatCount(following)}</Text>
               <Text style={styles.statLabel}>Following</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {!isOwnProfile && (
@@ -461,6 +482,9 @@ const styles = StyleSheet.create({
   },
   statBox: {
     alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
   statNumber: {
     color: '#fff',

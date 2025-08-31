@@ -376,14 +376,34 @@ export default function ProfileScreen() {
               <Text style={styles.statNumber}>{formatCount(posts.length)}</Text>
               <Text style={styles.statLabel}>Posts</Text>
             </View>
-            <View style={styles.statBox}>
+            <TouchableOpacity 
+              style={styles.statBox}
+              onPress={() => {
+                console.log('ProfileScreen: Followers TouchableOpacity pressed!');
+                navigation.navigate('FollowersList', { 
+                  userId: currentUserIdRef.current, 
+                  username: profile?.username 
+                });
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={styles.statNumber}>{formatCount(followers)}</Text>
               <Text style={styles.statLabel}>Followers</Text>
-            </View>
-            <View style={styles.statBox}>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.statBox}
+              onPress={() => {
+                console.log('ProfileScreen: Following TouchableOpacity pressed!');
+                navigation.navigate('FollowingList', { 
+                  userId: currentUserIdRef.current, 
+                  username: profile?.username 
+                });
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={styles.statNumber}>{formatCount(following)}</Text>
               <Text style={styles.statLabel}>Following</Text>
-            </View>
+            </TouchableOpacity>
           </View>
           <TouchableOpacity
             style={styles.editBtn}
@@ -502,6 +522,9 @@ const styles = StyleSheet.create({
   },
   statBox: {
     alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
   statNumber: {
     color: '#fff',

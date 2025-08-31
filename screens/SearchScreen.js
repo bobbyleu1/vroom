@@ -4,8 +4,7 @@ import { View, TextInput, FlatList, Text, TouchableOpacity, StyleSheet, Activity
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
-
-const placeholderAvatar = 'https://i.imgur.com/1bX5QH6.png';
+import { getProfileImageSource } from '../utils/profileHelpers';
 
 const SearchScreen = ({ navigation }) => {
   const [query, setQuery] = useState('');
@@ -122,8 +121,14 @@ const SearchScreen = ({ navigation }) => {
   const renderUserItem = (user) => (
     <TouchableOpacity style={styles.userItem} onPress={() => handleUserPress(user)}>
       <Image 
-        source={{ uri: user.avatar_url || placeholderAvatar }} 
+        source={getProfileImageSource(user.avatar_url)} 
         style={styles.userAvatar}
+        onError={(error) => {
+          console.log('SearchScreen: User avatar load error:', error.nativeEvent.error);
+        }}
+        onLoad={() => {
+          console.log('SearchScreen: User avatar loaded successfully for:', user.username);
+        }}
       />
       <View style={styles.userInfo}>
         <Text style={styles.username}>@{user.username}</Text>
@@ -135,7 +140,7 @@ const SearchScreen = ({ navigation }) => {
   const renderVideoItem = (video) => (
     <TouchableOpacity style={styles.videoItem} onPress={() => handleVideoPress(video)}>
       <Image 
-        source={{ uri: video.thumbnail_url || placeholderAvatar }} 
+        source={video.thumbnail_url ? { uri: video.thumbnail_url } : require('../assets/video-placeholder.png')} 
         style={styles.videoThumbnail}
       />
       <View style={styles.videoInfo}>

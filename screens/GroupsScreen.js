@@ -262,7 +262,10 @@ function GroupsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Vroom</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={28} color="#00BFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Groups</Text>
         <TouchableOpacity style={styles.createGroupButton} onPress={() => setShowCreateGroupModal(true)}>
           <Ionicons name="add" size={24} color="#000" />
         </TouchableOpacity>
@@ -354,10 +357,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingBottom: 15,
   },
+  backButton: {
+    padding: 4,
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 28,
     fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
   },
   createGroupButton: {
     backgroundColor: '#00BFFF',

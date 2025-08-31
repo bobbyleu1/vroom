@@ -768,13 +768,12 @@ const styles = StyleSheet.create({
   },
   animatedPlayPause: {
     position: 'absolute',
-    left: '50%',
-    top: '50%',
+    left: (width - 120) / 2,
+    top: (height - 120) / 2,
     width: 120,
     height: 120,
     justifyContent: 'center',
     alignItems: 'center',
-    transform: [{ translateX: -60 }, { translateY: -60 }],
   },
   playPauseIconBackground: {
     width: 120,

@@ -154,6 +154,8 @@ function UserPostsFeedScreen({ route, navigation }) {
             navigation={navigation}
             currentUserId={currentUserId}
             shouldOpenComments={openComments && index === initialPostIndex}
+            disableIPadCentering={true}
+            usePhoneViewport={true}
             onPostDeleted={(deletedPostId) => {
               setPosts(prevPosts => prevPosts.filter(post => post.id !== deletedPostId));
             }}

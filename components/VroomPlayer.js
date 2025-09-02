@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Video from 'react-native-video';
+import VideoFit from './VideoFit';
 // Temporarily disable Mux monitoring to fix video loading
 // import muxReactNativeVideo from '@mux/mux-data-react-native-video';
 import app from '../package.json';
@@ -7,7 +8,7 @@ import app from '../package.json';
 // const MuxVideo = muxReactNativeVideo(Video);
 const MuxVideo = Video; // Use plain Video component
 
-export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, postId, userId, muxOptions, posterSource, resizeMode = "cover", onLoad, onBuffer, onProgress, onError, onVideoLoadStart, ...props }, ref) => {
+export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, postId, userId, muxOptions, posterSource, resizeMode = "cover", onLoad, onBuffer, onProgress, onError, onVideoLoadStart, leftAlignContent, ...props }, ref) => {
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -76,13 +77,13 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
   }));
 
   return (
-    <MuxVideo
+    <VideoFit
       ref={videoRef}
       source={{ uri: sourceUri }}
       poster={posterSource || undefined} // Only set poster if we have a valid URL
       muted
       repeat
-      resizeMode={resizeMode}
+      leftAlignContent={leftAlignContent}
       // Optimized buffer settings for instant playback on mobile
       bufferConfig={{
         minBufferMs: 2500, // 2.5 seconds minimum buffer (much faster)

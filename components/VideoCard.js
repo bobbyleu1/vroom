@@ -10,7 +10,9 @@ import {
   Dimensions,
   Animated,
   Alert,
+  Platform,
 } from 'react-native';
+import { isTablet } from '../utils/device';
 import { VroomPlayer } from './VroomPlayer';
 import VideoDebug from '../src/components/VideoDebug.tsx';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,9 +26,37 @@ import { recordEngagement } from '../utils/personalizedFeed';
 import { notifyPostLike } from '../utils/notificationHelpers';
 import { getProfileImageSource } from '../utils/profileHelpers';
 import * as Haptics from 'expo-haptics';
+import PhoneViewport from './PhoneViewport';
 
 // Grab the device dimensions once so we can calculate responsive styles
 const { height, width } = Dimensions.get('window');
+
+// Force iPhone-only behavior - isTablet is now always false from utils/device
+
+// For iPad, we'll create a phone-sized container in the center
+const getPhoneContainerWidth = () => {
+  if (isTablet) {
+    // Use iPhone 15 Pro Max width (430px) or similar phone aspect ratio
+    const phoneWidth = Math.min(430, height * (9/21)); // 9:21 phone aspect ratio
+    return phoneWidth;
+  }
+  return width; // Phone: use full width
+};
+
+const getPhoneContainerHeight = () => {
+  if (isTablet) {
+    const phoneWidth = getPhoneContainerWidth();
+    return phoneWidth * (21/9); // Phone aspect ratio 9:21
+  }
+  return height; // Phone: use full height
+};
+
+const getContainerMarginLeft = () => {
+  if (isTablet) {
+    return (width - getPhoneContainerWidth()) / 2;
+  }
+  return 0; // Phone: no margin
+};
 
 /**
  * Format a numeric count into a more human‑readable string. For example
@@ -56,7 +86,7 @@ const formatCount = (num) => {
  * modal. Like and comment counts are kept in sync with Supabase in real
  * time via a channel subscription.
 */
-const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCommentsModalChange, isAnyCommentsModalOpen, currentUserId, onPostDeleted }) => {
+const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCommentsModalChange, isAnyCommentsModalOpen, currentUserId, onPostDeleted, disableIPadCentering = false, usePhoneViewport = false }) => {
   const videoRef = useRef(null);
   const [heartScale] = useState(new Animated.Value(0));
   const [playPauseScale] = useState(new Animated.Value(0));
@@ -251,17 +281,11 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
     const isCurrentVideo = index === currentVideoIndex;
     const isUpcomingVideo = index === currentVideoIndex + 1 || index === currentVideoIndex + 2;
     
-    // Reduce logging frequency for better performance
-    if (Math.random() < 0.1) { // Only log 10% of the time
-      console.log(`VideoCard ${item.id} at index ${index}: shouldPlay=${shouldPlay} (currentVideoIndex=${currentVideoIndex})`);
-    }
-    
-    if (isCurrentVideo) {
-      // Current video - play immediately
+    // Only update playing state when it actually changes
+    if (isCurrentVideo && !isPlaying) {
       setIsPlaying(true);
       console.log(`[VideoCard ${item.id}] Started playing current video`);
-    } else {
-      // Non-current video - pause
+    } else if (!isCurrentVideo && isPlaying) {
       setIsPlaying(false);
     }
   }, [index, currentVideoIndex, item.id]);
@@ -513,26 +537,69 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
     }
   };
 
-  // Debug logging
-  console.log('FEED_DIAG_MODE:', FEED_DIAG_MODE, 'for post:', item.id);
+  // Debug logging - only when diag mode is enabled
+  if (FEED_DIAG_MODE) {
+    console.log('FEED_DIAG_MODE:', FEED_DIAG_MODE, 'for post:', item.id);
+  }
 
   // Check if the media is an image or video
   const isImage = item.media_url?.includes('.jpg') || item.media_url?.includes('.jpeg') || item.media_url?.includes('.png') || item.media_url?.includes('.JPG') || item.media_url?.includes('.JPEG') || item.media_url?.includes('.PNG');
   const isVideo = item.media_url?.includes('.mp4') || item.media_url?.includes('.mov') || item.media_url?.includes('.MOV') || item.playback_id;
   
-  // Reduce logging frequency for better performance
-  if (Math.random() < 0.05) { // Only log 5% of the time for media type detection
+  // Reduce logging frequency for better performance - only in debug mode
+  if (__DEV__ && Math.random() < 0.01) { // Only log 1% of the time in development
     console.log(`VideoCard ${item.id}: isImage=${isImage}, isVideo=${isVideo}, media_url=${item.media_url}`);
   }
   
-  return (
-    <View style={styles.videoContainer}>
+  // Create Instagram-style centered phone container for iPad
+  const responsiveVideoContainer = {
+    ...styles.videoContainer,
+    ...(isTablet && !disableIPadCentering && {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#000',
+    }),
+    // When iPad centering is disabled, add flex layout to position content to the left
+    ...(isTablet && disableIPadCentering && {
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      backgroundColor: '#000',
+    })
+  };
+
+  const phoneContainer = {
+    ...(isTablet && {
+      width: getPhoneContainerWidth(),
+      height: getPhoneContainerHeight(),
+      backgroundColor: '#000',
+      overflow: 'hidden',
+      position: 'relative', // Ensure absolutely positioned children are relative to this container
+    })
+  };
+
+  // Dynamic video player styles for proper aspect ratio on iPad
+  const videoPlayerStyle = {
+    ...styles.videoPlayer,
+    // When iPad centering is disabled, constrain video to fit screen properly
+    ...(isTablet && disableIPadCentering && {
+      width: width * 0.9, // Use 90% of screen width
+      height: height * 0.9, // Use 90% of screen height to ensure full video is visible
+      alignSelf: 'flex-start',
+    })
+  };
+
+  // Pass leftAlignContent prop for profile screens to ensure proper alignment
+  const leftAlignContent = isTablet && disableIPadCentering;
+
+
+  const renderVideoContent = () => (
+    <View style={{ flex: 1 }}>
       {FEED_DIAG_MODE ? (
         <VideoDebug post={item} active={isPlaying} />
       ) : isImage ? (
         <Image
           source={{ uri: item.media_url }}
-          style={styles.videoPlayer}
+          style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
           onLoadStart={() => {
             console.log(`[VideoCard ${item.id}] Image load started`);
@@ -543,20 +610,18 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
           onError={(error) => {
             console.error(`[VideoCard ${item.id}] Image load error:`, error.nativeEvent.error);
           }}
-          // Add fallback background color to prevent black flash
           defaultSource={require('../assets/video-placeholder.png')}
         />
       ) : (
         <VroomPlayer
           ref={videoRef}
           videoUrl={item.media_url}
-          playbackId={item.playback_id} // Use Mux if available (updated field name)
+          playbackId={item.playback_id}
           posterSource={item.thumbnail_url}
           title={item.content}
           postId={item.id}
           userId={currentUserId}
-          style={styles.videoPlayer}
-          resizeMode="cover"
+          style={{ width: '100%', height: '100%' }}
           repeat={true}
           paused={!isPlaying}
           muted={isMuted}
@@ -575,18 +640,18 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
           }}
         />
       )}
-      {/* Tap area for video controls - positioned behind UI elements */}
+      
+      {/* Tap area for video controls */}
       <TouchableOpacity
         activeOpacity={1}
         onPress={handleTap}
         style={styles.videoTapArea}
         disabled={isCommentsModalVisible}
       />
+      
       {/* Overlay for text and actions */}
       <View style={styles.overlayContainer} pointerEvents="box-none">
-        {/* Left side: Username and Caption */}
         <TouchableOpacity onPress={handleProfilePress} style={styles.leftContent}>
-          {/* Photo tag for image posts */}
           {isImage && (
             <View style={styles.photoTag}>
               <Text style={styles.photoTagText}>PHOTO</Text>
@@ -596,17 +661,12 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
             <Text style={styles.usernameText}>@{item.profiles.username}</Text>
           )}
           {item.content ? (
-            // Use numberOfLines and ellipsizeMode to truncate long captions to
-            // two lines rather than allowing scrolling or overlap.
-            <Text
-              style={styles.captionText}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
+            <Text style={styles.captionText} numberOfLines={2} ellipsizeMode="tail">
               {item.content}
             </Text>
           ) : null}
         </TouchableOpacity>
+        
         {/* Animated Heart Overlay */}
         <Animated.View
           style={[
@@ -641,8 +701,15 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
           </View>
         </Animated.View>
       </View>
-      {/* Avatar - Now wrapped in TouchableOpacity */}
-      <TouchableOpacity onPress={handleProfilePress} style={styles.avatarContainer}>
+      
+      {/* Avatar */}
+      <TouchableOpacity onPress={handleProfilePress} style={[
+        styles.avatarContainer,
+        usePhoneViewport && {
+          // When using PhoneViewport (iPad), align with action stack positioning
+          right: '6%', // Match action stack position to prevent clipping
+        }
+      ]}>
         <Image 
           source={getProfileImageSource(item.profiles?.avatar_url)} 
           style={styles.avatar}
@@ -651,29 +718,38 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
           }}
         />
       </TouchableOpacity>
-      {/* Action Bar - Only hide when THIS video's comments are open */}
-      {isCommentsModalVisible ? null : (
-        <ActionBar
-          post={item}
-          hasLiked={hasLiked}
-          localLikeCount={localLikeCount}
-          commentCount={commentCount}
-          onLikePress={handleLike}
-          onCommentPress={handleComment}
-          isFavorited={isSaved}
-          onFavoritePress={handleFavorite}
-          currentUserId={currentUserId || loggedInUserId}
-          onPostDeleted={() => {
-            // Handle post deletion - remove from feed and potentially navigate
-            if (onPostDeleted) {
-              onPostDeleted(item.id);
-            } else {
-              // Fallback for screens that don't provide onPostDeleted
-              navigation?.goBack?.();
-            }
-          }}
-        />
+      
+      {/* Action Bar */}
+      {!isCommentsModalVisible && (
+        <View style={[
+          styles.actionBarContainer,
+          usePhoneViewport && {
+            // When using PhoneViewport (iPad), provide more margin to prevent clipping
+            right: '6%', // Moved slightly right (reduced margin)
+            alignItems: 'center', // Center the action buttons horizontally
+          }
+        ]}>
+          <ActionBar
+            post={item}
+            hasLiked={hasLiked}
+            localLikeCount={localLikeCount}
+            commentCount={commentCount}
+            onLikePress={handleLike}
+            onCommentPress={handleComment}
+            isFavorited={isSaved}
+            onFavoritePress={handleFavorite}
+            currentUserId={currentUserId || loggedInUserId}
+            onPostDeleted={() => {
+              if (onPostDeleted) {
+                onPostDeleted(item.id);
+              } else {
+                navigation?.goBack?.();
+              }
+            }}
+          />
+        </View>
       )}
+      
       {/* Comments Sheet */}
       <CommentsSheet
         visible={isCommentsModalVisible}
@@ -682,11 +758,18 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
         onClose={() => {
           setIsCommentsModalVisible(false);
           onCommentsModalChange?.(false);
-          // Refresh counts when closing the sheet to pick up any new comments
           refreshCounts();
         }}
       />
     </View>
+  );
+
+  return usePhoneViewport ? (
+    <PhoneViewport align={disableIPadCentering ? "left" : "center"}>
+      {renderVideoContent()}
+    </PhoneViewport>
+  ) : (
+    renderVideoContent()
   );
 });
 
@@ -747,6 +830,13 @@ const styles = StyleSheet.create({
     right: 12,
     top: height * 0.45, // Original position restored
     zIndex: 10, // Same level as action bar
+  },
+  actionBarContainer: {
+    position: 'absolute',
+    right: 15,
+    bottom: 120,
+    alignItems: 'center',
+    zIndex: 99,
   },
   avatar: {
     width: 50,

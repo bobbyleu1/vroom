@@ -11,6 +11,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { isPad, getPhoneViewport } from '../utils/phoneViewport';
 import { Ionicons, AntDesign, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { sharePost } from '../utils/share';
@@ -20,6 +21,7 @@ import { confirmAndDeletePost } from '../utils/postManagement';
 import { supabase } from '../utils/supabase';
 
 const { width, height } = Dimensions.get('window');
+const { phoneWidth, phoneHeight } = isPad ? getPhoneViewport() : { phoneWidth: width, phoneHeight: height };
 
 const ShareModal = ({ 
   visible, 
@@ -271,9 +273,9 @@ const styles = StyleSheet.create({
   safeArea: {
     position: 'absolute',
     bottom: 0,
-    left: 0,
-    right: 0,
-    maxHeight: height * 0.8,
+    left: isPad ? (width - phoneWidth) / 2 : 0,
+    right: isPad ? (width - phoneWidth) / 2 : 0,
+    maxHeight: (isPad ? phoneHeight : height) * 0.8,
   },
   container: {
     backgroundColor: '#1C1C1E',

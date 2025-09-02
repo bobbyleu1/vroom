@@ -1,7 +1,85 @@
 import { supabase } from './supabase';
 
 /**
- * Create a notification record in the database
+ * Check for duplicate notifications to prevent spam
+ */
+async function checkForDuplicateNotification(userId, type, message, relatedUserId, relatedPostId, senderId) {
+  try {
+    // Define different deduplication timeframes based on notification type
+    const dedupeWindows = {
+      'direct_message': 30, // 30 seconds for DMs (prevent rapid message spam)
+      'post_like': 300, // 5 minutes for likes (prevent button mashing)
+      'post_comment': 60, // 1 minute for comments 
+      'follow': 3600, // 1 hour for follows (prevents accidental double follows)
+      'comment_like': 300, // 5 minutes for comment likes
+      'forum_reply': 60, // 1 minute for forum replies
+      'forum_like': 300, // 5 minutes for forum likes
+      'test': 10, // 10 seconds for test notifications
+      'default': 120 // 2 minutes default
+    };
+
+    const windowSeconds = dedupeWindows[type] || dedupeWindows['default'];
+
+    // Check for recent similar notifications
+    const { data: recentNotifications, error } = await supabase
+      .from('notifications')
+      .select('id, created_at')
+      .eq('user_id', userId)
+      .eq('type', type)
+      .eq('message', message)
+      .gte('created_at', new Date(Date.now() - windowSeconds * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error checking for duplicate notifications:', error);
+      return { isDuplicate: false };
+    }
+
+    if (recentNotifications && recentNotifications.length > 0) {
+      const existingNotification = recentNotifications[0];
+      const timeDiff = Date.now() - new Date(existingNotification.created_at).getTime();
+      
+      return {
+        isDuplicate: true,
+        reason: `Similar ${type} notification sent ${Math.round(timeDiff/1000)}s ago (within ${windowSeconds}s window)`,
+        existingNotification: { id: existingNotification.id }
+      };
+    }
+
+    // Additional check for post-related notifications (same post, same sender, same type)
+    if (relatedPostId && senderId) {
+      const { data: postRelatedNotifications, error: postError } = await supabase
+        .from('notifications')
+        .select('id, created_at')
+        .eq('user_id', userId)
+        .eq('type', type)
+        .eq('related_post_id', relatedPostId)
+        .eq('sender_id', senderId)
+        .gte('created_at', new Date(Date.now() - windowSeconds * 1000).toISOString())
+        .limit(1);
+
+      if (!postError && postRelatedNotifications && postRelatedNotifications.length > 0) {
+        const existingNotification = postRelatedNotifications[0];
+        const timeDiff = Date.now() - new Date(existingNotification.created_at).getTime();
+        
+        return {
+          isDuplicate: true,
+          reason: `Similar ${type} notification for same post from same sender ${Math.round(timeDiff/1000)}s ago`,
+          existingNotification: { id: existingNotification.id }
+        };
+      }
+    }
+
+    return { isDuplicate: false };
+  } catch (error) {
+    console.error('Exception checking for duplicate notifications:', error);
+    return { isDuplicate: false }; // On error, allow the notification to proceed
+  }
+}
+
+/**
+ * Create a notification record in the database with deduplication
  */
 export async function createNotification({
   userId,
@@ -12,6 +90,13 @@ export async function createNotification({
   senderId = null
 }) {
   try {
+    // Check for recent duplicate notifications to prevent spam
+    const dedupeResult = await checkForDuplicateNotification(userId, type, message, relatedUserId, relatedPostId, senderId);
+    if (dedupeResult.isDuplicate) {
+      console.log('⚠️  Skipping duplicate notification:', dedupeResult.reason);
+      return dedupeResult.existingNotification;
+    }
+
     const { data: notificationId, error } = await supabase
       .rpc('create_notification_rpc', {
         p_user_id: userId,
@@ -26,6 +111,8 @@ export async function createNotification({
       console.error('Error creating notification:', error);
       return null;
     }
+
+    console.log('✅ Created new notification:', notificationId);
 
     // Trigger push notification via Edge Function
     const pushResult = await triggerPushNotification(userId, type, message, notificationId);
@@ -48,8 +135,29 @@ export async function createNotification({
  */
 export async function triggerPushNotification(userId, type, message, notificationId) {
   try {
-    console.log('📡 Attempting to invoke send-push-notification edge function...');
-    console.log('📦 Payload:', { userId, type, message, notificationId });
+    console.log('📡 [PUSH_NOTIFICATION_DEBUG] Attempting to invoke send-push-notification edge function...');
+    console.log('📦 [PUSH_NOTIFICATION_DEBUG] Payload:', { userId, type, message, notificationId });
+    
+    // Check if user exists and has push token before calling edge function
+    const { data: userProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, username, push_token')
+      .eq('id', userId)
+      .single();
+
+    if (profileError) {
+      console.error('❌ [PUSH_NOTIFICATION_DEBUG] Error fetching user profile:', profileError);
+      return null;
+    }
+
+    if (!userProfile?.push_token) {
+      console.warn('⚠️  [PUSH_NOTIFICATION_DEBUG] User has no push token, skipping edge function call');
+      console.log('📋 [PUSH_NOTIFICATION_DEBUG] User profile:', { id: userProfile?.id, username: userProfile?.username, has_token: !!userProfile?.push_token });
+      return null;
+    }
+
+    console.log('✅ [PUSH_NOTIFICATION_DEBUG] User has valid push token, calling edge function');
+    console.log('📋 [PUSH_NOTIFICATION_DEBUG] Token preview:', userProfile.push_token.substring(0, 25) + '...');
     
     const { data, error } = await supabase.functions.invoke('send-push-notification', {
       body: {
@@ -61,8 +169,8 @@ export async function triggerPushNotification(userId, type, message, notificatio
     });
 
     if (error) {
-      console.error('❌ Error triggering push notification via edge function:', error);
-      console.error('📋 Error details:', {
+      console.error('❌ [PUSH_NOTIFICATION_DEBUG] Error triggering push notification via edge function:', error);
+      console.error('📋 [PUSH_NOTIFICATION_DEBUG] Error details:', {
         message: error.message,
         status: error.status,
         code: error.code,
@@ -71,30 +179,32 @@ export async function triggerPushNotification(userId, type, message, notificatio
       
       // Log specific error types
       if (error.status === 404) {
-        console.error('🚫 Edge function not found - may not be deployed');
+        console.error('🚫 [PUSH_NOTIFICATION_DEBUG] Edge function not found - may not be deployed');
       } else if (error.status === 500) {
-        console.error('💥 Edge function internal error - check function logs');
+        console.error('💥 [PUSH_NOTIFICATION_DEBUG] Edge function internal error - check function logs with: supabase functions logs send-push-notification');
       } else if (error.status === 401) {
-        console.error('🔐 Authentication error calling edge function');
+        console.error('🔐 [PUSH_NOTIFICATION_DEBUG] Authentication error calling edge function');
+      } else if (error.status === 403) {
+        console.error('🔒 [PUSH_NOTIFICATION_DEBUG] Permission denied - check RLS policies');
       }
       
       return null;
     }
     
-    console.log('✅ Push notification edge function response:', data);
+    console.log('✅ [PUSH_NOTIFICATION_DEBUG] Push notification edge function response:', data);
     
     // Validate response
     if (data && data.success) {
-      console.log('🎯 Edge function reported success');
+      console.log('🎯 [PUSH_NOTIFICATION_DEBUG] Edge function reported success');
       return data;
     } else {
-      console.error('❌ Edge function completed but reported failure:', data);
+      console.error('❌ [PUSH_NOTIFICATION_DEBUG] Edge function completed but reported failure:', data);
       return null;
     }
     
   } catch (error) {
-    console.error('💥 Exception triggering push notification:', error);
-    console.error('📋 Exception details:', {
+    console.error('💥 [PUSH_NOTIFICATION_DEBUG] Exception triggering push notification:', error);
+    console.error('📋 [PUSH_NOTIFICATION_DEBUG] Exception details:', {
       message: error.message,
       name: error.name,
       stack: error.stack?.substring(0, 200) + '...'

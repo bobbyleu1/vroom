@@ -366,6 +366,12 @@ function SimpleFeedScreen() {
     minimumViewTime: 50,
   };
 
+  // Optimize render with memoized callbacks
+  const onCommentsModalChange = useCallback(() => {}, []);
+  const onPostDeleted = useCallback((deletedPostId) => {
+    setItems(prevItems => prevItems.filter(prevItem => prevItem.id !== deletedPostId));
+  }, []);
+
   const renderItem = useCallback(({ item, index }) => {
     if (item.type === 'ad') {
       return <NativeAdCardFeed key={`ad-${item.adId}-${index}`} adId={item.adId} />;
@@ -378,15 +384,14 @@ function SimpleFeedScreen() {
         index={index}
         currentVideoIndex={currentVideoIndex}
         navigation={navigation}
-        onCommentsModalChange={() => {}}
+        onCommentsModalChange={onCommentsModalChange}
         isAnyCommentsModalOpen={false}
         currentUserId={currentUserId}
-        onPostDeleted={(deletedPostId) => {
-          setItems(prevItems => prevItems.filter(prevItem => prevItem.id !== deletedPostId));
-        }}
+        usePhoneViewport={true}
+        onPostDeleted={onPostDeleted}
       />
     );
-  }, [currentVideoIndex, navigation, currentUserId]);
+  }, [currentVideoIndex, navigation, currentUserId, onCommentsModalChange, onPostDeleted]);
 
   const keyExtractor = useCallback((item, index) => {
     // Create a stable unique key combining item info with position
@@ -455,10 +460,10 @@ function SimpleFeedScreen() {
         getItemLayout={getItemLayout}
         ListFooterComponent={renderFooter}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={2}
-        updateCellsBatchingPeriod={100}
+        maxToRenderPerBatch={1} // Reduced for better performance
+        updateCellsBatchingPeriod={200} // Increased to reduce update frequency
         initialNumToRender={1}
-        windowSize={2}
+        windowSize={3} // Slightly increased for smoother scrolling
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

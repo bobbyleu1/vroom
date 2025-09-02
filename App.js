@@ -5,7 +5,8 @@ if (typeof globalThis.structuredClone !== 'function') {
 
 import 'react-native-get-random-values'; // <<< KEEP THIS AT THE VERY TOP
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
+import { lockPortraitIphoneOnly } from './utils/orientation';
 import mobileAds from 'react-native-google-mobile-ads';
 import { View, ActivityIndicator, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -42,7 +43,9 @@ import FollowingListScreen from './screens/FollowingListScreen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ScrollLockProvider } from './contexts/ScrollLockContext';
 import { UnreadMessagesProvider, useUnreadMessages } from './contexts/UnreadMessagesContext';
-import { initializePushNotifications } from './utils/notificationService';
+import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
+import { setupPushNotificationsWithFeedback } from './utils/enhancedNotificationService';
+import { runNotificationDiagnostic, testNotificationFlow, simulateUserLike, simulateUserComment, simulateUserFollow } from './utils/notificationTester';
 import ErrorBoundary from './components/ErrorBoundary';
 import RedDot, { RedDotPositions } from './components/RedDot';
 
@@ -190,7 +193,7 @@ function AppNavigator() {
   React.useEffect(() => {
     if (session?.user) {
       // Run in background - don't block UI
-      initializePushNotifications().catch(error => {
+      setupPushNotificationsWithFeedback(false).catch(error => {
         console.error('Background push notification init failed:', error);
       });
     }
@@ -269,6 +272,11 @@ function AppNavigator() {
 }
 
 export default function App() {
+  // Lock orientation to portrait and enforce iPhone-only behavior
+  useEffect(() => {
+    lockPortraitIphoneOnly();
+  }, []);
+
   // Global error handler for unhandled exceptions
   React.useEffect(() => {
     const handleError = (error, isFatal) => {
@@ -307,13 +315,35 @@ export default function App() {
       });
   }, []);
 
+  // Add notification diagnostic tools to global scope for easy testing
+  React.useEffect(() => {
+    if (__DEV__) {
+      global.testNotifications = {
+        runDiagnostic: runNotificationDiagnostic,
+        testFlow: testNotificationFlow,
+        simulateLike: simulateUserLike,
+        simulateComment: simulateUserComment,
+        simulateFollow: simulateUserFollow,
+      };
+      
+      console.log('🧪 Notification testing tools available:');
+      console.log('🧪 global.testNotifications.runDiagnostic() - Full system diagnostic');
+      console.log('🧪 global.testNotifications.testFlow() - Test basic notification');
+      console.log('🧪 global.testNotifications.simulateLike() - Simulate like notification');
+      console.log('🧪 global.testNotifications.simulateComment() - Simulate comment notification');
+      console.log('🧪 global.testNotifications.simulateFollow() - Simulate follow notification');
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <ScrollLockProvider>
         <AuthProvider>
-          <UnreadMessagesProvider>
-            <AppNavigator />
-          </UnreadMessagesProvider>
+          <NotificationProvider>
+            <UnreadMessagesProvider>
+              <AppNavigator />
+            </UnreadMessagesProvider>
+          </NotificationProvider>
         </AuthProvider>
       </ScrollLockProvider>
     </ErrorBoundary>

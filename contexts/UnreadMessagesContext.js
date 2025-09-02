@@ -38,80 +38,46 @@ export const UnreadMessagesProvider = ({ children }) => {
     };
   }, []);
 
-  // Fetch total unread messages count
+  // Fetch total unread messages count - optimized for speed
   const fetchUnreadCount = async (userId) => {
     if (!userId) return;
 
     try {
-      // Get user's conversations first
-      const { data: conversations, error: convError } = await supabase
-        .from('dm_conversations_with_participants')
-        .select('id')
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
-
-      if (convError) {
-        console.error('Error fetching conversations:', convError);
-        return;
-      }
-
-      if (!conversations || conversations.length === 0) {
-        setTotalUnreadCount(0);
-        return;
-      }
-
-      // Count all unread messages across all conversations
-      const conversationIds = conversations.map(conv => conv.id);
-      console.log('UnreadMessages: Counting unread messages for conversations:', conversationIds);
-      
-      // First try to check if the table exists and is accessible
-      const { data: testData, error: testError } = await supabase
-        .from('dm_messages')
-        .select('id', { count: 'exact', head: true })
-        .limit(1);
-      
-      if (testError) {
-        console.error('Cannot access dm_messages table:', testError);
-        // Fallback: assume no unread messages for now
-        setTotalUnreadCount(0);
-        return;
-      }
-      
-      console.log('dm_messages table accessible, proceeding with count query');
-      
-      // Try a simpler query first to see what columns exist
-      const { data: sampleMessage, error: sampleError } = await supabase
-        .from('dm_messages')
-        .select('*')
-        .limit(1)
-        .single();
-        
-      if (sampleError && sampleError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error fetching sample message to check schema:', sampleError);
-        setTotalUnreadCount(0);
-        return;
-      }
-      
-      if (sampleMessage) {
-        console.log('dm_messages table columns:', Object.keys(sampleMessage));
-      }
-
+      // Optimize: Single query to count unread messages directly
+      // Using a more efficient approach - count messages where user is recipient and unread
       const { count, error: countError } = await supabase
         .from('dm_messages')
         .select('*', { count: 'exact', head: true })
-        .in('conversation_id', conversationIds)
-        .neq('sender_id', userId)
-        .eq('is_read', false);
+        .neq('sender_id', userId) // Messages not sent by current user
+        .eq('is_read', false)      // That are unread
+        .in('conversation_id', 
+          supabase
+            .from('dm_conversations_with_participants')
+            .select('id')
+            .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+        );
 
       if (countError) {
         console.error('Error fetching total unread count:', countError);
-        console.error('Query details:', {
-          table: 'dm_messages',
-          conversationIds,
-          userId,
-          query: 'count unread messages where conversation_id in [...] AND author_id != userId AND is_read = false'
-        });
-        // Fallback: assume no unread messages
-        setTotalUnreadCount(0);
+        // Fallback: try simpler approach
+        const { data: conversations } = await supabase
+          .from('dm_conversations_with_participants')
+          .select('id')
+          .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+          
+        if (conversations && conversations.length > 0) {
+          const conversationIds = conversations.map(conv => conv.id);
+          const { count: fallbackCount } = await supabase
+            .from('dm_messages')
+            .select('*', { count: 'exact', head: true })
+            .in('conversation_id', conversationIds)
+            .neq('sender_id', userId)
+            .eq('is_read', false);
+            
+          setTotalUnreadCount(fallbackCount || 0);
+        } else {
+          setTotalUnreadCount(0);
+        }
         return;
       }
 
@@ -120,12 +86,21 @@ export const UnreadMessagesProvider = ({ children }) => {
       console.log('UnreadMessages: Total unread count updated:', total);
     } catch (error) {
       console.error('Exception fetching unread count:', error);
+      setTotalUnreadCount(0);
     }
   };
 
-  // Subscribe to real-time updates for messages
+  // Subscribe to real-time updates for messages with debouncing
   const subscribeToMessagesUpdates = (userId) => {
     if (!userId) return;
+
+    let updateTimeout = null;
+    const debouncedUpdate = () => {
+      if (updateTimeout) clearTimeout(updateTimeout);
+      updateTimeout = setTimeout(() => {
+        fetchUnreadCount(userId);
+      }, 500); // Debounce for 500ms to prevent excessive calls
+    };
 
     // Subscribe to message inserts/updates that could affect unread count
     const messagesChannel = supabase
@@ -137,10 +112,9 @@ export const UnreadMessagesProvider = ({ children }) => {
           schema: 'public',
           table: 'dm_messages',
         },
-        async (payload) => {
-          console.log('UnreadMessages: Message change detected:', payload);
-          // Refresh unread count when messages change
-          await fetchUnreadCount(userId);
+        (payload) => {
+          console.log('UnreadMessages: Message change detected');
+          debouncedUpdate();
         }
       )
       .on(
@@ -150,15 +124,15 @@ export const UnreadMessagesProvider = ({ children }) => {
           schema: 'public',
           table: 'dm_conversations',
         },
-        async (payload) => {
-          console.log('UnreadMessages: Conversation change detected:', payload);
-          // Refresh unread count when conversations change
-          await fetchUnreadCount(userId);
+        (payload) => {
+          console.log('UnreadMessages: Conversation change detected');
+          debouncedUpdate();
         }
       )
       .subscribe();
 
     return () => {
+      if (updateTimeout) clearTimeout(updateTimeout);
       messagesChannel.unsubscribe();
     };
   };

@@ -144,9 +144,6 @@ const ActionBar = ({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    right: 15,
-    bottom: 120, // Original position to avoid overlap with avatar
     alignItems: 'center',
     zIndex: 99,
   },

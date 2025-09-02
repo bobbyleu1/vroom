@@ -1690,6 +1690,8 @@ PODS:
     - ReactCommon/turbomodule/core
   - react-native-get-random-values (1.11.0):
     - React-Core
+  - react-native-orientation-locker (1.7.0):
+    - React-Core
   - react-native-safe-area-context (5.4.0):
     - DoubleConversion
     - glog
@@ -2497,6 +2499,7 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - react-native-get-random-values (from `../node_modules/react-native-get-random-values`)
+  - react-native-orientation-locker (from `../node_modules/react-native-orientation-locker`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - react-native-video (from `../node_modules/react-native-video`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
@@ -2683,6 +2686,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   react-native-get-random-values:
     :path: "../node_modules/react-native-get-random-values"
+  react-native-orientation-locker:
+    :path: "../node_modules/react-native-orientation-locker"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   react-native-video:
@@ -2833,6 +2838,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 96a2f2a176268581733be182fa6eebab1c0193be
   React-microtasksnativemodule: bda561d2648e1e52bd9e5a87f8889836bdbde2e2
   react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
+  react-native-orientation-locker: cc6f357b289a2e0dd2210fea0c52cb8e0727fdaa
   react-native-safe-area-context: 562163222d999b79a51577eda2ea8ad2c32b4d06
   react-native-video: 8b867791128487bf82c9b6070ceddd2697bfabec
   React-NativeModulesApple: 1ecb83880dd11baf2228f8dd89d8419c387e03ad
@@ -2879,6 +2885,6 @@ SPEC CHECKSUMS:
   Yoga: adb397651e1c00672c12e9495babca70777e411e
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: e9b54a6b1f2b3b22472ae82d3ebb80b458159c95
+PODFILE CHECKSUM: 606a4d744fd6902f0e126dc1753a57d27dca30ce
 
 COCOAPODS: 1.16.2

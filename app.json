@@ -13,19 +13,22 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.bobbyleu1.vroommobile",
-      "icon": "./assets/AppIcon.PNG",
+      "icon": "./assets/icon.png",
+      "requireFullScreen": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Vroom needs access to your camera to allow you to record and upload videos.",
         "NSPhotoLibraryUsageDescription": "Vroom needs access to your media library to upload saved videos or images.",
         "NSMicrophoneUsageDescription": "Vroom needs access to your microphone to record audio for videos.",
+        "UIDeviceFamily": [1],
+        "UIRequiresFullScreen": true,
         "UISupportedInterfaceOrientations": [
-          "UIInterfaceOrientationPortrait",
-          "UIInterfaceOrientationPortraitUpsideDown",
-          "UIInterfaceOrientationLandscapeLeft", 
-          "UIInterfaceOrientationLandscapeRight"
+          "UIInterfaceOrientationPortrait"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait"
         ],
         "UIBackgroundModes": [
           "remote-notification"
@@ -38,7 +41,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/AppIcon.PNG",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,

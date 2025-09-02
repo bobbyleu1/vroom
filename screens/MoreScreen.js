@@ -3,13 +3,19 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import RedDot, { RedDotPositions } from '../components/RedDot';
+import { getIPadStyles, isTablet } from '../utils/iPadStyles';
 
 const MoreScreen = ({ navigation }) => {
   const { hasUnreadMessages, totalUnreadCount } = useUnreadMessages();
+  const { unreadCount: notificationUnreadCount } = useNotifications();
+  const iPadStyles = getIPadStyles('#1a1a1d');
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={iPadStyles.container}>
+        <View style={iPadStyles.phoneContainer}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>More</Text>
       </View>
@@ -36,7 +42,14 @@ const MoreScreen = ({ navigation }) => {
           style={styles.button}
           onPress={() => navigation.navigate('Notifications')}
         >
-          <Ionicons name="notifications-outline" size={30} color="#FFF" style={styles.buttonIcon} />
+          <View style={styles.buttonIconContainer}>
+            <Ionicons name="notifications-outline" size={30} color="#FFF" style={styles.buttonIcon} />
+            <RedDot 
+              visible={notificationUnreadCount > 0} 
+              style={RedDotPositions.iconBadge}
+              size={12}
+            />
+          </View>
           <Text style={styles.buttonText}>Notifications</Text>
           <Ionicons name="chevron-forward" size={24} color="#FFF" />
         </TouchableOpacity>
@@ -68,6 +81,8 @@ const MoreScreen = ({ navigation }) => {
           <Text style={styles.buttonText}>Settings</Text>
           <Ionicons name="chevron-forward" size={24} color="#FFF" />
         </TouchableOpacity>
+      </View>
+        </View>
       </View>
     </SafeAreaView>
   );

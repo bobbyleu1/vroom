@@ -15,6 +15,7 @@ import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useUnreadMessages } from '../contexts/UnreadMessagesContext';
 import { getProfileImageSource } from '../utils/profileHelpers';
+import { getIPadStyles, isTablet } from '../utils/iPadStyles';
 
 // Helper to format updated_at timestamps into relative time strings
 const formatTimeAgo = (timestamp) => {
@@ -186,8 +187,12 @@ const MessagesScreen = () => {
     );
   };
 
+  const iPadStyles = getIPadStyles('#1a1a1d');
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={iPadStyles.container}>
+        <View style={iPadStyles.phoneContainer}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -209,6 +214,8 @@ const MessagesScreen = () => {
           <Text style={styles.emptyText}>No conversations yet. Tap + to start one.</Text>
         }
       />
+        </View>
+      </View>
     </SafeAreaView>
   );
 };

@@ -18,6 +18,8 @@ import { supabase } from '../utils/supabase';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Video } from 'expo-av';
 import { getProfileImageSource } from '../utils/profileHelpers';
+import PhoneViewport from '../components/PhoneViewport';
+import { isPad } from '../utils/phoneViewport';
 
 const { width } = Dimensions.get('window');
 
@@ -277,7 +279,7 @@ export default function ProfileScreen() {
           postsData: data,
           sourceTab: activeTab
         })}
-        style={styles.postTile}
+        style={responsiveStyles.postTile}
       >
         <Image 
           source={imageSource} 
@@ -346,10 +348,21 @@ export default function ProfileScreen() {
     );
   }
 
-  return (
+  // Dynamic styles for proper grid sizing on iPad
+  const containerWidth = width;
+  const responsiveStyles = StyleSheet.create({
+    postTile: {
+      width: containerWidth / 3,
+      aspectRatio: 9/16, // Proper video aspect ratio instead of 1:1
+      borderWidth: 1,
+      borderColor: '#2a2a2d',
+    },
+  });
+
+  const renderContent = () => (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-        <View style={styles.header}>
+      <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image 
               source={getProfileImageSource(profile.avatar_url)} 
@@ -426,14 +439,20 @@ export default function ProfileScreen() {
             style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
             onPress={() => setActiveTab('saved')}
           >
-            <Text style={[styles.tabText, activeTab === 'saved' && styles.activeTabText]}>Saved</Text>
+            <Text style={[styles.tabText, activeTab === 'saved' && styles.activeTabText]}>Favorites</Text>
             {activeTab === 'saved' && <View style={styles.tabUnderline} />}
           </TouchableOpacity>
         </View>
 
         {renderTabContent()}
-      </ScrollView>
+        </ScrollView>
     </View>
+  );
+
+  return (
+    <PhoneViewport>
+      {renderContent()}
+    </PhoneViewport>
   );
 }
 

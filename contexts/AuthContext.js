@@ -1,7 +1,7 @@
 // contexts/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
-import { initializePushNotifications } from '../utils/notificationService';
+import { setupPushNotificationsWithFeedback } from '../utils/enhancedNotificationService';
 import { ensureUserProfile } from '../utils/profileHelpers';
 
 const AuthContext = createContext();
@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
         
         // Run in background - don't block UI
         Promise.all([
-          initializePushNotifications(),
+          setupPushNotificationsWithFeedback(true), // Show user prompts for better UX
           ensureUserProfile(session.user.id, session.user.email)
         ]).catch(error => {
           console.error('Background initialization failed:', error);

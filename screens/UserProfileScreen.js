@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Video } from 'expo-av'; // For video thumbnails
 import { notifyFollow } from '../utils/notificationHelpers';
 import { getProfileImageSource } from '../utils/profileHelpers';
+import PhoneViewport from '../components/PhoneViewport';
 
 // Get the window dimensions for responsive styling
 // <<< THIS LINE MUST BE PRESENT RIGHT AFTER IMPORTS
@@ -302,9 +303,10 @@ function UserProfileScreen({ route, navigation }) {
   const isOwnProfile = currentUserIdRef.current === userId;
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-        <View style={styles.header}>
+    <PhoneViewport>
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+          <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image
               source={getProfileImageSource(profile.avatar_url)}
@@ -404,8 +406,9 @@ function UserProfileScreen({ route, navigation }) {
         ) : (
           <Text style={styles.noPostsText}>No posts yet.</Text>
         )}
-      </ScrollView>
-    </View>
+        </ScrollView>
+      </View>
+    </PhoneViewport>
   );
 }
 

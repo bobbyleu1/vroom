@@ -39,6 +39,9 @@ import UserPostsFeedScreen from './screens/UserPostsFeedScreen';
 import SearchScreen from './screens/SearchScreen';
 import FollowersListScreen from './screens/FollowersListScreen';
 import FollowingListScreen from './screens/FollowingListScreen';
+import FindMeetScreen from './screens/FindMeetScreen';
+import CreateMeetScreen from './screens/CreateMeetScreen';
+import MeetDetailScreen from './screens/MeetDetailScreen';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ScrollLockProvider } from './contexts/ScrollLockContext';
@@ -258,6 +261,27 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
+            <Stack.Screen
+              name="FindMeet"
+              component={FindMeetScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="CreateMeet"
+              component={CreateMeetScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="MeetDetail"
+              component={MeetDetailScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
           </>
         ) : (
           <>
@@ -280,18 +304,35 @@ export default function App() {
   // Global error handler for unhandled exceptions
   React.useEffect(() => {
     const handleError = (error, isFatal) => {
-      console.error('Global error handler:', error, 'Fatal:', isFatal);
+      console.error('Global error handler:', {
+        message: error?.message || 'Unknown error',
+        stack: error?.stack,
+        fatal: isFatal,
+        timestamp: new Date().toISOString()
+      });
       
       // Don't crash the app for non-fatal errors
       if (!isFatal) {
         console.log('Non-fatal error handled gracefully');
-        return true;
+        return true; // Prevent default handling
       }
+      
+      // For fatal errors, still log but let the app handle it
+      console.error('Fatal error - app may need to restart');
+      return false; // Let default handling take over
     };
 
     // Set up global error handling (if available)
     if (global.ErrorUtils) {
+      const originalHandler = global.ErrorUtils.getGlobalHandler();
       global.ErrorUtils.setGlobalHandler(handleError);
+      
+      // Cleanup function
+      return () => {
+        if (originalHandler) {
+          global.ErrorUtils.setGlobalHandler(originalHandler);
+        }
+      };
     }
   }, []);
 

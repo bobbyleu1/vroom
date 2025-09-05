@@ -57,7 +57,14 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
     console.error(`[VroomPlayer ${postId}] Video error:`, error);
     setHasError(true);
     setIsBuffering(false);
-    onError?.(error);
+    setIsLoaded(false); // Reset loaded state on error
+    
+    // Provide more detailed error handling
+    try {
+      onError?.(error);
+    } catch (callbackError) {
+      console.error(`[VroomPlayer ${postId}] Error in onError callback:`, callbackError);
+    }
   };
 
   const handleProgress = (data) => {
@@ -68,12 +75,36 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
     onProgress?.(data);
   };
 
-  // Expose ref methods for parent components
+  // Expose ref methods for parent components with error handling
   React.useImperativeHandle(ref, () => ({
-    seek: (time) => videoRef.current?.seek(time),
-    presentFullscreenPlayer: () => videoRef.current?.presentFullscreenPlayer(),
-    dismissFullscreenPlayer: () => videoRef.current?.dismissFullscreenPlayer(),
-    save: (options) => videoRef.current?.save(options),
+    seek: (time) => {
+      try {
+        videoRef.current?.seek(time);
+      } catch (error) {
+        console.error(`[VroomPlayer ${postId}] Error seeking to ${time}:`, error);
+      }
+    },
+    presentFullscreenPlayer: () => {
+      try {
+        videoRef.current?.presentFullscreenPlayer();
+      } catch (error) {
+        console.error(`[VroomPlayer ${postId}] Error presenting fullscreen:`, error);
+      }
+    },
+    dismissFullscreenPlayer: () => {
+      try {
+        videoRef.current?.dismissFullscreenPlayer();
+      } catch (error) {
+        console.error(`[VroomPlayer ${postId}] Error dismissing fullscreen:`, error);
+      }
+    },
+    save: (options) => {
+      try {
+        videoRef.current?.save(options);
+      } catch (error) {
+        console.error(`[VroomPlayer ${postId}] Error saving video:`, error);
+      }
+    },
   }));
 
   return (

@@ -74,95 +74,61 @@ export class VroomFeedManager {
     const session = this.initUserSession(userId);
     
     console.log(`[DIVERSITY] Starting with ${posts.length} posts, need ${maxSizeNeeded}`);
-    console.log(`[DIVERSITY] Recent authors: ${session.recentAuthors.slice(-3)}`);
     
-    // First, filter out already seen posts
-    const unseenPosts = posts.filter(post => !session.shownPostIds.has(post.id));
-    console.log(`[DIVERSITY] After filtering seen posts: ${unseenPosts.length} unseen`);
+    // Much less aggressive filtering - just filter obviously seen posts
+    const recentlySeenIds = new Set([...session.shownPostIds].slice(-10)); // Only last 10 seen
+    const unseenPosts = posts.filter(post => !recentlySeenIds.has(post.id));
+    console.log(`[DIVERSITY] After filtering recently seen: ${unseenPosts.length} unseen`);
     
-    // Then, diversify by author to avoid clustering - MUCH more aggressive
+    // If we don't have enough unseen posts, just return what we have
+    if (unseenPosts.length < maxSizeNeeded) {
+      console.log('[DIVERSITY] Not enough unseen posts, returning all available');
+      return unseenPosts.slice(0, maxSizeNeeded);
+    }
+    
+    // Light diversity filtering - just avoid immediate repeats
     const diversifiedPosts = [];
     const usedAuthors = new Set();
+    const lastAuthor = session.recentAuthors[session.recentAuthors.length - 1];
     
-    // Get the last 3 authors to avoid clustering (instead of just 1)
-    const recentAuthors = new Set(session.recentAuthors.slice(-3));
-    
-    // AGGRESSIVE FIRST PASS: Only allow completely new authors
+    // FIRST PASS: Avoid just the last author to prevent immediate repeats
     for (const post of unseenPosts) {
       if (diversifiedPosts.length >= maxSizeNeeded) break;
       
       const authorId = post.author_id;
       
-      // Skip if this author was in the last 3 posts
-      if (recentAuthors.has(authorId)) {
-        console.log(`[DIVERSITY] Skipping post from recent author: ${authorId}`);
-        continue;
-      }
-      
-      // Skip if we already have a post from this author in this batch
-      if (usedAuthors.has(authorId)) {
-        console.log(`[DIVERSITY] Skipping duplicate author in batch: ${authorId}`);
-        continue;
+      // Only skip if this is the exact same author as the last post
+      if (authorId === lastAuthor && diversifiedPosts.length === 0) {
+        continue; // Skip only the first post if it's from same author
       }
       
       diversifiedPosts.push(post);
       usedAuthors.add(authorId);
-      console.log(`[DIVERSITY] Added post from new author: ${authorId}`);
     }
     
-    console.log(`[DIVERSITY] After aggressive pass: ${diversifiedPosts.length} diverse posts`);
+    console.log(`[DIVERSITY] After light filtering: ${diversifiedPosts.length} posts`);
     
-    // SECOND PASS: If we need more content, allow authors not in last 2 posts
+    // If we still need more, just add any remaining posts
     if (diversifiedPosts.length < maxSizeNeeded) {
-      const lastTwoAuthors = new Set(session.recentAuthors.slice(-2));
-      
-      for (const post of unseenPosts) {
-        if (diversifiedPosts.length >= maxSizeNeeded) break;
-        
-        // Skip if already included
-        if (diversifiedPosts.includes(post)) continue;
-        
-        const authorId = post.author_id;
-        
-        // Only avoid the last 2 authors (instead of 3)
-        if (lastTwoAuthors.has(authorId)) continue;
-        
-        // Still avoid duplicates in this batch
-        if (usedAuthors.has(authorId)) continue;
-        
-        diversifiedPosts.push(post);
-        usedAuthors.add(authorId);
-        console.log(`[DIVERSITY] Added post from semi-recent author: ${authorId}`);
-      }
+      const remaining = unseenPosts.filter(post => !diversifiedPosts.includes(post));
+      diversifiedPosts.push(...remaining.slice(0, maxSizeNeeded - diversifiedPosts.length));
     }
     
-    console.log(`[DIVERSITY] After second pass: ${diversifiedPosts.length} posts`);
+    console.log(`[DIVERSITY] FINAL: ${diversifiedPosts.length} posts returned`);
     
-    // THIRD PASS: Only if desperate for content, allow last author
-    if (diversifiedPosts.length < Math.min(3, maxSizeNeeded)) {
-      const lastAuthor = session.recentAuthors[session.recentAuthors.length - 1];
-      
-      for (const post of unseenPosts) {
-        if (diversifiedPosts.length >= maxSizeNeeded) break;
-        
-        if (diversifiedPosts.includes(post)) continue;
-        
-        // Only allow if we're desperate AND it's not creating immediate back-to-back
-        if (post.author_id === lastAuthor && diversifiedPosts.length > 0) continue;
-        
-        diversifiedPosts.push(post);
-        console.log(`[DIVERSITY] DESPERATE: Added post from recent author: ${post.author_id}`);
+    // Track these posts as shown
+    diversifiedPosts.forEach(post => {
+      if (post.id) {
+        session.shownPostIds.add(post.id);
       }
-    }
-    
-    const totalFiltered = posts.length - unseenPosts.length;
-    const diversityFiltered = unseenPosts.length - diversifiedPosts.length;
-    
-    console.log(`[DIVERSITY] FINAL: ${diversifiedPosts.length} posts (filtered ${totalFiltered} seen + ${diversityFiltered} clustering)`);
-    
-    // Log the final author sequence to debug clustering
-    const finalAuthors = diversifiedPosts.map(p => p.author_id).slice(0, 5);
-    console.log(`[DIVERSITY] Final author sequence: ${finalAuthors}`);
+      if (post.author_id) {
+        session.recentAuthors.push(post.author_id);
+        // Keep recent authors array manageable
+        if (session.recentAuthors.length > this.RECENT_AUTHOR_MEMORY) {
+          session.recentAuthors.shift();
+        }
+      }
+    });
     
     return diversifiedPosts;
   }
@@ -202,15 +168,43 @@ export class VroomFeedManager {
           
           if (fastError) {
             console.error('[VROOM FEED] Error loading fast feed fallback:', fastError);
-            return { posts: [], hasMore: false, error: fastError };
-          }
-          
-          feedData = fastData || [];
-          
-          // Apply diversity filtering to fallback too
-          if (feedData.length > 0) {
-            feedData = this.filterForDiversity(userId, feedData, batchSize);
-            console.log(`[VROOM FEED] Fast feed fallback after diversity filtering: ${feedData.length} posts`);
+            // Final fallback to simple query
+            console.log('[VROOM FEED] Using direct query fallback...');
+            const { data: directData, error: directError } = await supabase
+              .from('posts')
+              .select(`
+                id, created_at, content, author_id, media_url, mux_hls_url,
+                mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
+                like_count, comment_count, view_count,
+                profiles!inner (username, avatar_url)
+              `)
+              .not('media_url', 'is', null)
+              .order('created_at', { ascending: false })
+              .limit(batchSize);
+            
+            if (directError) {
+              console.error('[VROOM FEED] Direct query also failed:', directError);
+              return { posts: [], hasMore: false, error: directError };
+            }
+            
+            feedData = (directData || []).map(post => ({
+              ...post,
+              username: post.profiles?.username,
+              avatar_url: post.profiles?.avatar_url,
+              type: 'content',
+              engagement_score: (post.like_count || 0) + (post.comment_count || 0),
+              is_recycled: false
+            }));
+            
+            console.log(`[VROOM FEED] Direct query fallback loaded ${feedData.length} posts`);
+          } else {
+            feedData = fastData || [];
+            
+            // Apply diversity filtering to fallback too
+            if (feedData.length > 0) {
+              feedData = this.filterForDiversity(userId, feedData, batchSize);
+              console.log(`[VROOM FEED] Fast feed fallback after diversity filtering: ${feedData.length} posts`);
+            }
           }
         } else {
           feedData = data || [];

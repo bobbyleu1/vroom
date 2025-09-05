@@ -139,10 +139,10 @@ export function useEndlessFeedV2() {
       const rows = data || [];
       console.log(`[FEED] fetchOlder: Found ${rows.length} posts`);
       
-      // Filter out already seen posts (but be less aggressive than initial load)
-      const ex = new Set(excludeIds().slice(-10)); // Only exclude last 10 seen items for pagination
-      const filtered = rows.filter(r => !ex.has(r.id));
-      console.log(`[FEED] fetchOlder: After filtering: ${filtered.length} posts`);
+      // Filter out already seen posts (be less aggressive for pagination)
+      const excludeSet = new Set(excludeIds().slice(-5)); // Only exclude last 5 seen items for pagination
+      const filtered = rows.filter(r => !excludeSet.has(r.id));
+      console.log(`[FEED] fetchOlder: After filtering (excluded ${excludeSet.size} recent): ${filtered.length} posts`);
 
       setItems(prev => {
         const next = uniqAppend([...prev], filtered);
@@ -150,30 +150,32 @@ export function useEndlessFeedV2() {
         return next;
       });
       
+      // Always advance cursor regardless of filtering
+      if (rows.length > 0) {
+        const last = rows[rows.length - 1]!;
+        beforeRef.current = { created_at: last.created_at, id: last.id };
+        console.log('[FEED] Set cursor to:', last.created_at, last.id);
+      }
+      
       if (!filtered.length) {
-        console.log('[FEED] No new posts after filtering, trying with no filter...');
-        // If filtering removed everything, try without filter
+        console.log('[FEED] No new posts after filtering, adding unfiltered results...');
+        // If filtering removed everything, add raw results but still advance pagination
         setItems(prev => {
           const next = uniqAppend([...prev], rows);
           if (next.length > MAX_POOL) next.splice(0, next.length - MAX_POOL);
           return next;
         });
-        
-        if (rows.length > 0) {
-          const last = rows[rows.length - 1]!;
-          beforeRef.current = { created_at: last.created_at, id: last.id };
-          console.log('[FEED] Set cursor to:', last.created_at, last.id);
-        }
-      } else if (filtered.length > 0) {
-        const last = filtered[filtered.length - 1]!;
-        beforeRef.current = { created_at: last.created_at, id: last.id };
-        console.log('[FEED] Set cursor to:', last.created_at, last.id);
       }
       
       // Only set hasMore to false if we got NO results from database at all
+      // AND we tried multiple times (not just filtering)
       if (!rows.length) {
         console.log('[FEED] No more items in database, setting hasMore to false');
         setHasMore(false);
+      } else if (rows.length < PAGE_SIZE) {
+        // If we got some results but less than page size, we're near the end
+        console.log(`[FEED] Got ${rows.length} items (less than page size ${PAGE_SIZE}), still has more but nearing end`);
+        // Don't set hasMore to false yet - there might be more after filtering
       }
       
     } catch (err) {

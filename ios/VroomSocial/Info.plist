@@ -17,7 +17,7 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
-    <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+    <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
     <key>CFBundleSignature</key>
@@ -58,26 +58,50 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>The app needs access to your camera to take photos and videos.</string>
+    <string>This app needs camera access to record videos and take photos for posts.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Vroom Social uses your location to provide location-based features like finding nearby meets.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Vroom Social needs your location to help you find nearby meets and events in your area.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>The app needs access to your microphone to record videos.</string>
+    <string>This app needs microphone access to record videos with audio.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to save photos</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>The app needs access to your photos to upload media.</string>
+    <string>This app needs photo library access to select photos and videos for posts.</string>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+      <key>UIApplicationSupportsMultipleScenes</key>
+      <true/>
+      <key>UISceneConfigurations</key>
+      <dict>
+        <key>UIWindowSceneSessionRoleApplication</key>
+        <array>
+          <dict>
+            <key>UISceneConfigurationName</key>
+            <string>Default Configuration</string>
+            <key>UISceneDelegateClassName</key>
+            <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+          </dict>
+        </array>
+      </dict>
+    </dict>
     <key>UIBackgroundModes</key>
     <array>
       <string>remote-notification</string>
+      <string>location</string>
     </array>
     <key>UIDeviceFamily</key>
     <array>
       <integer>1</integer>
     </array>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
-      <string>arm64</string>
+      <string>armv7</string>
     </array>
     <key>UIRequiresFullScreen</key>
     <true/>
@@ -86,10 +110,15 @@
     <key>UISupportedInterfaceOrientations</key>
     <array>
       <string>UIInterfaceOrientationPortrait</string>
+      <string>UIInterfaceOrientationLandscapeLeft</string>
+      <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UISupportedInterfaceOrientations~ipad</key>
     <array>
       <string>UIInterfaceOrientationPortrait</string>
+      <string>UIInterfaceOrientationPortraitUpsideDown</string>
+      <string>UIInterfaceOrientationLandscapeLeft</string>
+      <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UIUserInterfaceStyle</key>
     <string>Light</string>

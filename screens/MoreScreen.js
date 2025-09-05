@@ -22,6 +22,15 @@ const MoreScreen = ({ navigation }) => {
       <View style={styles.content}>
         <TouchableOpacity
           style={styles.button}
+          onPress={() => navigation.navigate('FindMeet')}
+        >
+          <Ionicons name="location" size={30} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Find a Meet</Text>
+          <Ionicons name="chevron-forward" size={24} color="#FFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.button}
           onPress={() => navigation.navigate('Groups')}
         >
           <Ionicons name="people-circle-outline" size={30} color="#FFF" style={styles.buttonIcon} />

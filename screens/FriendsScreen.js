@@ -17,6 +17,7 @@ import {
 import { supabase } from '../utils/supabase';
 import VideoCard from '../components/VideoCard';
 import NativeAdCardFeed from '../components/NativeAdCardFeed';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 // Determine the snap interval for paging based on the full window height
 const { height } = Dimensions.get('window');
@@ -61,9 +62,9 @@ function FriendsScreen({ navigation }) {
           console.log('FriendsScreen: Found friend/mutual IDs:', friendOrMutualIds.length);
         }
       } catch (error) {
-        console.error('Error fetching friend/mutual IDs:', error.message);
-        setLoading(false);
-        return;
+        console.error('Error fetching friend/mutual IDs:', error);
+        // Still try to continue with empty friends list rather than crash
+        friendOrMutualIds = [];
       }
       let data = [];
       let error = null;
@@ -89,7 +90,7 @@ function FriendsScreen({ navigation }) {
           .in('author_id', friendOrMutualIds)
           .order('created_at', { ascending: false }));
       }
-      if (!error) {
+      if (!error && data) {
         const videos = data || [];
         // Insert a full‑screen ad after every ADS_FREQUENCY videos
         const itemsWithAds = [];
@@ -105,7 +106,9 @@ function FriendsScreen({ navigation }) {
         console.log('FriendsScreen: Total videos:', videos.length, 'Items with ads:', itemsWithAds.length);
         setItems(itemsWithAds);
       } else {
-        console.error("Error fetching friends' videos:", error.message);
+        console.error("Error fetching friends' videos:", error);
+        // Set empty items to show the "no friends" message instead of white screen
+        setItems([]);
       }
       console.log('FriendsScreen: Fetch completed, setting loading to false');
       setLoading(false);
@@ -147,31 +150,33 @@ function FriendsScreen({ navigation }) {
   }
 
   return (
-    <FlatList
-      data={items}
-      keyExtractor={(item, index) =>
-        item.type === 'ad' ? item.id : item.id?.toString() ?? index.toString()
-      }
-      pagingEnabled
-      snapToInterval={height}
-      decelerationRate="fast"
-      showsVerticalScrollIndicator={false}
-      onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
-      renderItem={({ item, index }) =>
-        item.type === 'ad' ? (
-          <NativeAdCardFeed />
-        ) : (
-          <VideoCard
-            item={item}
-            index={index}
-            currentVideoIndex={currentVideoIndex}
-            navigation={navigation}
-            currentUserId={currentUserId}
-          />
-        )
-      }
-    />
+    <ErrorBoundary>
+      <FlatList
+        data={items}
+        keyExtractor={(item, index) =>
+          item.type === 'ad' ? item.id : item.id?.toString() ?? index.toString()
+        }
+        pagingEnabled
+        snapToInterval={height}
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
+        renderItem={({ item, index }) =>
+          item.type === 'ad' ? (
+            <NativeAdCardFeed />
+          ) : (
+            <VideoCard
+              item={item}
+              index={index}
+              currentVideoIndex={currentVideoIndex}
+              navigation={navigation}
+              currentUserId={currentUserId}
+            />
+          )
+        }
+      />
+    </ErrorBoundary>
   );
 }
 

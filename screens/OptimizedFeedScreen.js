@@ -134,6 +134,15 @@ function OptimizedFeedScreen() {
     }
   }, [refreshNewer]);
 
+  const handleScroll = useCallback((event) => {
+    const { contentOffset } = event.nativeEvent;
+    // Prevent scrolling too far up which can cause blank screen
+    // This is more aggressive to prevent the issue entirely
+    if (contentOffset.y < -50) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, []);
+
   // Register refresh callback for double-tap on tab
   React.useEffect(() => {
     if (global.registerFeedRefresh) {
@@ -176,6 +185,8 @@ function OptimizedFeedScreen() {
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         removeClippedSubviews
         windowSize={5}
         maxToRenderPerBatch={6}
@@ -184,6 +195,12 @@ function OptimizedFeedScreen() {
         refreshing={refreshing}
         onRefresh={handleRefresh}
         contentContainerStyle={{ paddingBottom: 1 }}
+        bounces={true}
+        overScrollMode="never"
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+          autoscrollToTopThreshold: 10,
+        }}
         ListFooterComponent={loading ? (
           <ActivityIndicator style={{ padding: 16 }} />
         ) : null}
@@ -210,6 +227,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+    overflow: 'hidden',
   },
   loadingContainer: {
     flex: 1,

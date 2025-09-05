@@ -5,6 +5,7 @@ import {
   Dimensions, 
   StyleSheet, 
   View, 
+  Text,
   RefreshControl,
   TouchableOpacity
 } from 'react-native';
@@ -17,7 +18,6 @@ import { VroomFeedManager } from '../utils/vroomFeedManager';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const { height } = Dimensions.get('window');
-// Ad frequency is now handled by VroomFeedManager
 
 function SimpleFeedScreen() {
   const navigation = useNavigation();
@@ -29,8 +29,6 @@ function SimpleFeedScreen() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [preloadQueue, setPreloadQueue] = useState([]); // Queue of preloaded posts
-  const [isPreloading, setIsPreloading] = useState(false);
   const flatListRef = useRef(null);
 
   // Get current user
@@ -42,9 +40,116 @@ function SimpleFeedScreen() {
     fetchUser();
   }, []);
 
-  // Register refresh callback for double-tap feed refresh
+  // Register refresh callback for double-tap feed refresh (moved after refreshFeed is defined)
+
+  // Load initial feed with good batch size
+  const loadFeed = useCallback(async () => {
+    if (!currentUserId) return;
+    
+    try {
+      console.log('[SIMPLE FEED] Loading initial feed...');
+      const result = await VroomFeedManager.getFeed(currentUserId, 25); // Good initial batch
+      
+      if (!result.error && result.posts && result.posts.length > 0) {
+        const contentPosts = result.posts.filter(item => item.type !== 'ad');
+        setPosts(contentPosts);
+        setItems(result.posts);
+        setHasMore(result.hasMore !== false);
+        
+        console.log(`[SIMPLE FEED] Initial load: ${contentPosts.length} videos, ${result.posts.length} total items`);
+      } else {
+        // If no posts, still show the empty state rather than permanent loading
+        console.log('[SIMPLE FEED] No posts returned, showing empty state');
+        setPosts([]);
+        setItems([]);
+        setHasMore(false);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('[SIMPLE FEED] Error in initial load:', error);
+      // Always set loading to false to prevent black screen
+      setLoading(false);
+      setPosts([]);
+      setItems([]);
+    }
+  }, [currentUserId]);
+
+  // Load more posts - simple and reliable
+  const loadMore = useCallback(async () => {
+    if (loading || !hasMore || !currentUserId) {
+      return;
+    }
+    
+    console.log('[SIMPLE FEED] Loading more posts...');
+    setLoading(true);
+    
+    try {
+      const lastPost = posts.length > 0 ? posts[posts.length - 1] : null;
+      const result = await VroomFeedManager.getFeed(currentUserId, 20, lastPost?.id); // Consistent batch
+      
+      if (!result.error && result.posts && result.posts.length > 0) {
+        const contentPosts = result.posts.filter(item => item.type !== 'ad');
+        
+        // Deduplicate posts
+        const existingPostIds = new Set(posts.map(p => p.id));
+        const newContentPosts = contentPosts.filter(post => !existingPostIds.has(post.id));
+        
+        if (newContentPosts.length > 0) {
+          const updatedPosts = [...posts, ...newContentPosts];
+          const updatedItems = [...items, ...result.posts];
+          
+          setPosts(updatedPosts);
+          setItems(updatedItems);
+          
+          console.log(`[SIMPLE FEED] Added ${newContentPosts.length} posts, total: ${updatedPosts.length}`);
+          setHasMore(result.hasMore !== false && newContentPosts.length > 0);
+        } else {
+          console.log('[SIMPLE FEED] No new content after deduplication');
+          setHasMore(false);
+        }
+      } else {
+        console.log('[SIMPLE FEED] No more posts available');
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('[SIMPLE FEED] Error loading more posts:', error);
+    }
+    
+    setLoading(false);
+  }, [currentUserId, posts, items, loading, hasMore]);
+
+  // Refresh feed
+  const refreshFeed = useCallback(async () => {
+    if (refreshing || !currentUserId) return;
+    
+    console.log('[SIMPLE FEED] Refreshing feed...');
+    setRefreshing(true);
+    
+    try {
+      const result = await VroomFeedManager.refreshFeed(currentUserId, 20);
+      
+      if (!result.error && result.posts) {
+        const contentPosts = result.posts.filter(item => item.type !== 'ad');
+        
+        if (contentPosts.length > 0) {
+          // For refresh, replace the content completely
+          setPosts(contentPosts);
+          setItems(result.posts);
+          setHasMore(true);
+          
+          console.log(`[SIMPLE FEED] Refresh complete: ${contentPosts.length} new posts`);
+        }
+      }
+    } catch (error) {
+      console.error('[SIMPLE FEED] Error refreshing feed:', error);
+    }
+    
+    setRefreshing(false);
+  }, [currentUserId, refreshing]);
+
+  // Register refresh callback now that refreshFeed is defined
   useEffect(() => {
-    if (global.registerFeedRefresh && refreshFeed) {
+    if (global.registerFeedRefresh) {
       global.registerFeedRefresh(refreshFeed);
       console.log('[SIMPLE FEED] Feed refresh callback registered for double-tap');
     }
@@ -57,279 +162,25 @@ function SimpleFeedScreen() {
     };
   }, [refreshFeed]);
 
-  // Focus-based refresh disabled to prevent interruptions during scrolling
-  // Users can still refresh manually via pull-to-refresh or double-tap feed button
-  // const lastFocusTime = useRef(Date.now());
-  // useFocusEffect(
-  //   useCallback(() => {
-  //     // Focus-based refresh logic disabled
-  //   }, [])
-  // );
-
-  // Load initial feed with faster loading and optimistic loading
-  const loadFeed = useCallback(async () => {
-    if (!currentUserId) return;
-    
-    try {
-      // Start loading immediately without setting loading state first to avoid black screen
-      const result = await VroomFeedManager.getFeed(currentUserId, 10); // TikTok-style: Start with just 10 videos
-      
-      if (!result.error && result.posts && result.posts.length > 0) {
-        const contentPosts = result.posts.filter(item => item.type !== 'ad');
-        setPosts(contentPosts);
-        setItems(result.posts); // Posts already include ads
-        setHasMore(result.hasMore);
-        setLoading(false); // Only set loading to false after we have content
-        
-        // TikTok-style: Light preload only when needed, not immediately
-        if (result.hasMore && contentPosts.length > 0) {
-          console.log('[SIMPLE FEED] Initial load complete - will preload on scroll');
-        }
-      } else {
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('[SIMPLE FEED] Error in initial load:', error);
-      setLoading(false);
-    }
-  }, [currentUserId]);
-
-  // Load more posts - now uses preloaded content first
-  const loadMore = useCallback(async () => {
-    console.log(`[SIMPLE FEED] loadMore called - hasMore: ${hasMore}, loading: ${loading}, posts.length: ${posts.length}, preloadQueue: ${preloadQueue.length}`);
-    
-    if (loading) {
-      console.log('[SIMPLE FEED] loadMore blocked - already loading');
-      return;
-    }
-
-    // First, try to consume preloaded content
-    if (preloadQueue.length > 0) {
-      consumePreloadedContent();
-      // Trigger another preload for the next batch
-      setTimeout(() => preloadContent(), 500);
-      return;
-    }
-    
-    if (!currentUserId) {
-      console.log('[SIMPLE FEED] loadMore blocked - no user');
-      return;
-    }
-    
-    console.log('[SIMPLE FEED] Loading more posts...');
-    setLoading(true);
-    
-    const lastPost = posts.length > 0 ? posts[posts.length - 1] : null;
-    console.log('[SIMPLE FEED] Last post ID:', lastPost?.id);
-    
-    const result = await VroomFeedManager.getFeed(
-      currentUserId, 
-      15, // TikTok-style: Medium batch size for smooth loading
-      lastPost?.id
-    );
-    
-    if (!result.error && result.posts) {
-      if (result.posts.length === 0) {
-        console.log('[SIMPLE FEED] No more posts available');
-        setHasMore(false);
-      } else {
-        const contentPosts = result.posts.filter(item => item.type !== 'ad');
-        
-        // Deduplicate posts to prevent duplicate keys
-        const existingPostIds = new Set(posts.map(p => p.id));
-        const newContentPosts = contentPosts.filter(post => !existingPostIds.has(post.id));
-        
-        // Log if we're filtering out duplicates
-        const duplicatesFiltered = contentPosts.length - newContentPosts.length;
-        if (duplicatesFiltered > 0) {
-          console.warn(`[SIMPLE FEED] 🔄 Filtered out ${duplicatesFiltered} duplicate posts - feed is repeating!`);
-        }
-        
-        // Deduplicate all items (posts + ads)
-        const existingItemIds = new Set(items.map(item => item.id || item.adId));
-        const newItems = result.posts.filter(item => {
-          const itemId = item.id || item.adId;
-          return !existingItemIds.has(itemId);
-        });
-        
-        if (newContentPosts.length > 0 || newItems.length > 0) {
-          const updatedPosts = [...posts, ...newContentPosts];
-          const updatedItems = [...items, ...newItems];
-          
-          // Debug: Check for any remaining duplicates
-          const postIds = updatedPosts.map(p => p.id);
-          const itemIds = updatedItems.map(item => item.id || item.adId);
-          const duplicatePostIds = postIds.filter((id, index) => postIds.indexOf(id) !== index);
-          const duplicateItemIds = itemIds.filter((id, index) => itemIds.indexOf(id) !== index);
-          
-          if (duplicatePostIds.length > 0) {
-            console.warn('[SIMPLE FEED] Duplicate post IDs found:', duplicatePostIds);
-          }
-          if (duplicateItemIds.length > 0) {
-            console.warn('[SIMPLE FEED] Duplicate item IDs found:', duplicateItemIds);
-          }
-          
-          setPosts(updatedPosts);
-          setItems(updatedItems);
-          console.log(`[SIMPLE FEED] Added ${newContentPosts.length} more posts, total: ${updatedPosts.length}`);
-        } else {
-          console.log('[SIMPLE FEED] No new unique content to add');
-        }
-        
-        // Always keep infinite scroll - TikTok never ends
-        setHasMore(true);
-      }
-    } else {
-      console.error('[SIMPLE FEED] Error loading more posts:', result.error);
-    }
-    
-    setLoading(false);
-  }, [currentUserId, posts, items, loading, preloadQueue, consumePreloadedContent, preloadContent]);
-
-  // Refresh feed with random nonce to ensure fresh content
-  const refreshFeed = useCallback(async () => {
-    const refreshNonce = Date.now(); // Unique identifier for this refresh
-    console.log(`[SIMPLE FEED] 🔄 REFRESH FEED CALLED - nonce: ${refreshNonce}, refreshing: ${refreshing}, currentUserId: ${currentUserId}`);
-    
-    if (refreshing || !currentUserId) {
-      console.log(`[SIMPLE FEED] refreshFeed blocked - refreshing: ${refreshing}, currentUserId: ${currentUserId}`);
-      return;
-    }
-    
-    console.log(`[SIMPLE FEED] Starting feed refresh with nonce ${refreshNonce}...`);
-    setRefreshing(true);
-    
-    // Clear preload queue to force fresh content
-    setPreloadQueue([]);
-    
-    const result = await VroomFeedManager.refreshFeed(currentUserId, 15); // TikTok-style: Smaller refresh batch
-    
-    if (!result.error && result.posts) {
-      const contentPosts = result.posts.filter(item => item.type !== 'ad');
-      
-      // Log the first few post IDs to verify we got different content
-      const newPostIds = contentPosts.slice(0, 5).map(p => p.id);
-      const currentPostIds = posts.slice(0, 5).map(p => p.id);
-      console.log(`[SIMPLE FEED] Refresh ${refreshNonce} - New posts:`, newPostIds);
-      console.log(`[SIMPLE FEED] Refresh ${refreshNonce} - Current posts:`, currentPostIds);
-      
-      // For refresh, we replace all content, so no deduplication needed
-      setPosts(contentPosts);
-      setItems(result.posts); // Already includes ads
-      setHasMore(result.hasMore);
-      
-      // Reset to first item
-      setCurrentVideoIndex(0);
-      if (flatListRef.current) {
-        flatListRef.current.scrollToIndex({ index: 0, animated: false });
-      }
-      
-      console.log(`[SIMPLE FEED] Feed refreshed successfully with ${result.posts.length} items (nonce: ${refreshNonce})`);
-    } else {
-      console.log(`[SIMPLE FEED] Feed refresh failed (nonce: ${refreshNonce}):`, result.error);
-    }
-    
-    setRefreshing(false);
-  }, [currentUserId, refreshing, posts, preloadQueue]); // Include dependencies for content tracking
-
-  // Track posts as seen when they become visible
-  const trackPostAsSeen = useCallback(async (item) => {
-    if (item.type === 'ad' || !currentUserId) return;
-    
-    try {
-      await VroomFeedManager.markPostAsSeen(currentUserId, item.id);
-      
-      // Mark recycled posts as reshown
-      if (item.is_recycled) {
-        await VroomFeedManager.markPostAsReshown(currentUserId, item.id);
-      }
-    } catch (error) {
-      console.error('Error tracking post as seen:', error);
-    }
-  }, [currentUserId]);
-
-  // Load feed when user is available
+  // Load feed when user available
   useEffect(() => {
     if (currentUserId) {
-      loadFeed();
+      loadFeed().catch(error => {
+        console.error('[SIMPLE FEED] Critical error in initial load:', error);
+        setLoading(false); // Prevent permanent loading state
+      });
     }
   }, [currentUserId, loadFeed]);
 
-  // Aggressive preloading function
-  const preloadContent = useCallback(async () => {
-    if (!currentUserId || isPreloading || !hasMore || posts.length === 0) return;
-    
-    setIsPreloading(true);
-    console.log('[SIMPLE FEED] Preloading more content...');
-    
-    try {
-      const lastPost = posts[posts.length - 1];
-      const preloadResult = await VroomFeedManager.getFeed(
-        currentUserId,
-        15, // TikTok-style: Keep preload batches small and frequent
-        lastPost?.id
-      );
-      
-      if (!preloadResult.error && preloadResult.posts && preloadResult.posts.length > 0) {
-        const newContentPosts = preloadResult.posts.filter(item => item.type !== 'ad');
-        const existingPostIds = new Set(posts.map(p => p.id));
-        const uniqueNewPosts = newContentPosts.filter(post => !existingPostIds.has(post.id));
-        
-        if (uniqueNewPosts.length > 0) {
-          console.log(`[SIMPLE FEED] Preloaded ${uniqueNewPosts.length} posts to queue`);
-          setPreloadQueue(prev => [...prev, ...uniqueNewPosts]);
-          setHasMore(preloadResult.hasMore);
-        }
-      }
-    } catch (error) {
-      console.error('[SIMPLE FEED] Error preloading content:', error);
-    } finally {
-      setIsPreloading(false);
+  // Track post as seen (simplified)
+  const trackPostAsSeen = useCallback((post) => {
+    // Simple seen tracking without complex logic
+    if (post && post.id) {
+      console.log(`[SIMPLE FEED] Viewed post: ${post.id}`);
     }
-  }, [currentUserId, isPreloading, hasMore, posts]);
+  }, []);
 
-  // TikTok-style scroll handler for smooth loading
-  const handleScroll = useCallback((event) => {
-    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const distanceFromEnd = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    
-    // TikTok-style: Trigger closer to the end for smoother experience
-    const preloadTriggerDistance = layoutMeasurement.height * 1.5; // Reduced from 2x to 1.5x
-    
-    // Only trigger preloading if conditions are met
-    if (distanceFromEnd < preloadTriggerDistance && !isPreloading && hasMore) {
-      preloadContent();
-    }
-  }, [preloadContent, isPreloading, hasMore]);
-
-  // Function to consume preloaded content
-  const consumePreloadedContent = useCallback(() => {
-    if (preloadQueue.length > 0) {
-      console.log(`[SIMPLE FEED] Adding ${preloadQueue.length} preloaded posts to feed`);
-      setPosts(prev => [...prev, ...preloadQueue]);
-      
-      // Add preloaded posts to items with ads
-      const preloadedItems = [...preloadQueue];
-      // Insert ads every 10 posts in preloaded content
-      const itemsWithAds = [];
-      preloadedItems.forEach((post, index) => {
-        if (index > 0 && index % 10 === 0) {
-          itemsWithAds.push({ type: 'ad', adId: `preload-ad-${Date.now()}-${index}` });
-        }
-        itemsWithAds.push(post);
-      });
-      
-      setItems(prev => [...prev, ...itemsWithAds]);
-      setPreloadQueue([]); // Clear the queue
-    }
-  }, [preloadQueue]);
-
-  // Debug logging for items count
-  useEffect(() => {
-    console.log(`[SIMPLE FEED] Items count updated: ${items.length} total items`);
-  }, [items.length]);
-
-  // Track current video index and mark posts as seen
+  // Aggressive loading trigger - load when 10 items left
   const onViewableItemsChanged = useCallback(({ viewableItems }) => {
     if (viewableItems && viewableItems.length > 0) {
       const firstVisibleItem = viewableItems[0];
@@ -340,41 +191,36 @@ function SimpleFeedScreen() {
         const currentIndex = firstVisibleItem.index;
         const remainingItems = totalItems - currentIndex;
         
-        // Reduce preload aggressiveness to avoid network timeouts
-        if (remainingItems <= 3 && !isPreloading && hasMore && preloadQueue.length === 0) {
-          console.log(`[SIMPLE FEED] Triggering preload - ${remainingItems} items remaining`);
-          preloadContent();
-        }
-        
         // Track post as seen
         const item = firstVisibleItem.item;
         if (item.type !== 'ad') {
           trackPostAsSeen(item);
         }
         
-        // Reduce fallback trigger to avoid network overload
-        if (remainingItems <= 3 && !loading && hasMore) {
-          console.log('[SIMPLE FEED] Also triggering loadMore fallback - remaining items:', remainingItems);
+        // Aggressive loading: trigger when 10 items left
+        if (remainingItems <= 10 && !loading && hasMore) {
+          console.log(`[SIMPLE FEED] Loading more - ${remainingItems} items remaining (${currentIndex}/${totalItems})`);
           loadMore();
         }
       }
     }
-  }, [trackPostAsSeen, items.length, loading, hasMore, loadMore, isPreloading, preloadQueue.length, preloadContent]);
+  }, [trackPostAsSeen, items.length, loading, hasMore, loadMore]);
 
   const viewabilityConfig = {
     itemVisiblePercentThreshold: 50,
     minimumViewTime: 50,
   };
 
-  // Optimize render with memoized callbacks
+  // Render callbacks
   const onCommentsModalChange = useCallback(() => {}, []);
   const onPostDeleted = useCallback((deletedPostId) => {
     setItems(prevItems => prevItems.filter(prevItem => prevItem.id !== deletedPostId));
+    setPosts(prevPosts => prevPosts.filter(prevPost => prevPost.id !== deletedPostId));
   }, []);
 
   const renderItem = useCallback(({ item, index }) => {
     if (item.type === 'ad') {
-      return <NativeAdCardFeed key={`ad-${item.adId}-${index}`} adId={item.adId} />;
+      return <NativeAdCardFeed key={`ad-${item.adId}-${index}`} />;
     }
 
     return (
@@ -391,36 +237,11 @@ function SimpleFeedScreen() {
         onPostDeleted={onPostDeleted}
       />
     );
-  }, [currentVideoIndex, navigation, currentUserId, onCommentsModalChange, onPostDeleted]);
+  }, [currentVideoIndex, navigation, onCommentsModalChange, currentUserId, onPostDeleted]);
 
   const keyExtractor = useCallback((item, index) => {
-    // Create a stable unique key combining item info with position
-    if (item.type === 'ad') {
-      return `ad-${item.adId || item.id || 'unknown'}-at-${index}`;
-    }
-    return `content-${item.id || 'unknown'}-at-${index}`;
+    return item.type === 'ad' ? `ad-${item.adId || index}` : `video-${item.id}`;
   }, []);
-
-  const renderFooter = () => {
-    if (!loading) return null;
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#00BFFF" />
-      </View>
-    );
-  };
-
-  // Add debug logging for FlatList events
-  const onEndReached = useCallback(() => {
-    console.log('[SIMPLE FEED] onEndReached triggered');
-    loadMore();
-  }, [loadMore]);
-
-  const getItemLayout = useCallback((data, index) => ({
-    length: height,
-    offset: height * index,
-    index,
-  }), []);
 
   if (loading && items.length === 0) {
     return (
@@ -430,49 +251,55 @@ function SimpleFeedScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      {/* Search Icon - positioned absolute in top right */}
-      <TouchableOpacity
-        style={[styles.searchButton, { top: insets.top + 10 }]}
-        onPress={() => navigation.navigate('Search')}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Ionicons name="search" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
+  // Show empty state if no loading and no items
+  if (!loading && items.length === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={[]}>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No videos yet!</Text>
+          <Text style={styles.emptySubtext}>Pull down to refresh</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
+  return (
+    <SafeAreaView style={styles.container} edges={[]}>
       <FlatList
         ref={flatListRef}
         data={items}
-        renderItem={renderItem}
         keyExtractor={keyExtractor}
-        showsVerticalScrollIndicator={false}
+        renderItem={renderItem}
         pagingEnabled
         snapToInterval={height}
-        snapToAlignment="start"
         decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        onEndReached={onEndReached}
-        onEndReachedThreshold={0.5}
-        onScroll={handleScroll}
-        scrollEventThrottle={500}
-        getItemLayout={getItemLayout}
-        ListFooterComponent={renderFooter}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={1} // Reduced for better performance
-        updateCellsBatchingPeriod={200} // Increased to reduce update frequency
-        initialNumToRender={1}
-        windowSize={3} // Slightly increased for smoother scrolling
+        removeClippedSubviews
+        windowSize={5}
+        maxToRenderPerBatch={8}
+        initialNumToRender={4}
+        getItemLayout={(data, index) => ({
+          length: height,
+          offset: height * index,
+          index,
+        })}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refreshFeed}
             tintColor="#00BFFF"
+            colors={["#00BFFF"]}
           />
         }
+        ListFooterComponent={loading && items.length > 0 ? (
+          <View style={styles.footerLoader}>
+            <ActivityIndicator size="small" color="#00BFFF" />
+          </View>
+        ) : null}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -481,31 +308,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  searchButton: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 20,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
   loadingContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerLoader: {
+    height: height,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',
   },
-  footerLoader: {
-    padding: 20,
-    alignItems: 'center',
+  emptyText: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: '#999',
+    fontSize: 16,
   },
 });
 

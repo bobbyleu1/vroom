@@ -273,12 +273,12 @@ export default function CameraScreen() {
     return (
       <View style={styles.permissionContainer}>
         <Ionicons name="camera-outline" size={80} color="#666" />
-        <Text style={styles.permissionText}>Camera access is required</Text>
+        <Text style={styles.permissionText}>Camera Access Required</Text>
         <Text style={styles.permissionSubtext}>
-          We need your permission to use the camera to take photos and videos
+          We need your camera to let you upload photos and videos to share with the community.
         </Text>
         <TouchableOpacity style={styles.permissionButton} onPress={requestPermissions}>
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          <Text style={styles.permissionButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     );

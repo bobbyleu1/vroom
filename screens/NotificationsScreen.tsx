@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../utils/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { getProfileImageSource } from '../utils/profileHelpers';
+import { useNotifications } from '../contexts/NotificationContext';
 
 type Notification = {
   id: string;
@@ -38,6 +39,7 @@ export default function NotificationsScreen({ navigation }: Props) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const insets = useSafeAreaInsets();
+  const { markAllAsRead } = useNotifications();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -152,6 +154,12 @@ export default function NotificationsScreen({ navigation }: Props) {
     if (!user?.id) return;
 
     fetchNotifications();
+    
+    // Mark all notifications as read when user views this screen
+    const markAsReadTimer = setTimeout(() => {
+      console.log('🔔 NotificationsScreen: Auto-marking all notifications as read');
+      markAllAsRead();
+    }, 1000); // Small delay to ensure screen is visible
 
     const channel = supabase
       .channel('notification_realtime')
@@ -174,9 +182,10 @@ export default function NotificationsScreen({ navigation }: Props) {
       .subscribe();
 
     return () => {
+      clearTimeout(markAsReadTimer);
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, markAllAsRead]);
 
   const handlePress = async (item: Notification) => {
     const data = item.data || {};

@@ -37,6 +37,7 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
     console.log(`[VroomPlayer ${postId}] Video load started`);
     setIsBuffering(true);
     setHasError(false);
+    setIsLoaded(false);
     onVideoLoadStart?.();
   };
 
@@ -44,6 +45,7 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
     console.log(`[VroomPlayer ${postId}] Video loaded - duration: ${data.duration}s`);
     setIsLoaded(true);
     setIsBuffering(false);
+    setHasError(false);
     onLoad?.(data);
   };
 
@@ -57,7 +59,7 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
     console.error(`[VroomPlayer ${postId}] Video error:`, error);
     setHasError(true);
     setIsBuffering(false);
-    setIsLoaded(false); // Reset loaded state on error
+    setIsLoaded(false);
     
     // Provide more detailed error handling
     try {
@@ -115,14 +117,14 @@ export const VroomPlayer = React.forwardRef(({ playbackId, videoUrl, title, post
       muted
       repeat
       leftAlignContent={leftAlignContent}
-      // Optimized buffer settings for instant playback on mobile
+      // Optimized buffer settings for faster loading and less black screen time
       bufferConfig={{
-        minBufferMs: 2500, // 2.5 seconds minimum buffer (much faster)
-        maxBufferMs: 15000, // 15 seconds maximum buffer (reduced)
-        bufferForPlaybackMs: 1000, // 1 second before playback starts (faster)
-        bufferForPlaybackAfterRebufferMs: 2000, // 2 seconds after rebuffer (faster)
+        minBufferMs: 1500, // 1.5 seconds minimum buffer (even faster)
+        maxBufferMs: 10000, // 10 seconds maximum buffer (further reduced)
+        bufferForPlaybackMs: 500, // 0.5 second before playback starts (much faster)
+        bufferForPlaybackAfterRebufferMs: 1000, // 1 second after rebuffer (faster)
       }}
-      maxBitRate={1000000} // 1 Mbps max bitrate for faster loading on mobile
+      maxBitRate={800000} // 800 Kbps max bitrate for even faster loading
       playInBackground={false}
       playWhenInactive={false}
       ignoreSilentSwitch="ignore"

@@ -1,6 +1,18 @@
-// Polyfill for structuredClone if not supported
+// Enhanced polyfill for structuredClone if not supported
 if (typeof globalThis.structuredClone !== 'function') {
-  globalThis.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
+  globalThis.structuredClone = (obj) => {
+    try {
+      return JSON.parse(JSON.stringify(obj));
+    } catch (error) {
+      console.warn('structuredClone fallback failed, returning original object:', error);
+      return obj;
+    }
+  };
+}
+
+// Additional polyfills for missing globals
+if (typeof global !== 'undefined' && !global.structuredClone) {
+  global.structuredClone = globalThis.structuredClone;
 }
 
 import 'react-native-get-random-values'; // <<< KEEP THIS AT THE VERY TOP
@@ -22,6 +34,9 @@ import ProfileScreen from './screens/ProfileScreen';
 import AuthScreen from './screens/AuthScreen';
 import OnboardingWelcomeScreen from './screens/OnboardingWelcomeScreen';
 import OnboardingProfilePictureScreen from './screens/OnboardingProfilePictureScreen';
+import EulaAcceptanceScreen from './screens/EulaAcceptanceScreen';
+import TermsOfServiceScreen from './screens/TermsOfServiceScreen';
+import PrivacyPolicyScreen from './screens/PrivacyPolicyScreen';
 import SimpleFeedScreen from './screens/SimpleFeedScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import MoreScreen from './screens/MoreScreen';
@@ -49,6 +64,7 @@ import { UnreadMessagesProvider, useUnreadMessages } from './contexts/UnreadMess
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
 import { setupPushNotificationsWithFeedback } from './utils/enhancedNotificationService';
 import { runNotificationDiagnostic, testNotificationFlow, simulateUserLike, simulateUserComment, simulateUserFollow } from './utils/notificationTester';
+import { meetCleanupService } from './utils/meetCleanupService';
 import ErrorBoundary from './components/ErrorBoundary';
 import RedDot, { RedDotPositions } from './components/RedDot';
 
@@ -190,7 +206,15 @@ function MainApp() {
 }
 
 function AppNavigator() {
-  const { session, loading } = useAuth();
+  const { session, loading, eulaAccepted } = useAuth();
+  
+  // Debug logging for navigation decisions
+  console.log('[APP DEBUG] Navigation state:', {
+    hasSession: !!session,
+    userEmail: session?.user?.email,
+    loading,
+    eulaAccepted
+  });
 
   // Initialize push notifications for logged in users
   React.useEffect(() => {
@@ -202,10 +226,14 @@ function AppNavigator() {
     }
   }, [session?.user]);
 
-  if (loading) {
+  // Show loading while auth is initializing OR while EULA status is being determined
+  if (loading || (session && eulaAccepted === null)) {
     return (
       <View style={styles.loadingIndicator}>
         <ActivityIndicator size="large" color="#00BFFF" />
+        {session && eulaAccepted === null && (
+          <Text style={styles.loadingText}>Checking agreements...</Text>
+        )}
       </View>
     );
   }
@@ -215,79 +243,93 @@ function AppNavigator() {
       <StatusBar style="auto" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
-          <>
-            <Stack.Screen name="MainApp" component={MainApp} />
-            <Stack.Screen name="PostPreview" component={PostPreviewScreen} />
-            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-            <Stack.Screen name="Groups" component={GroupsScreen} />
-            <Stack.Screen name="GroupDetail" component={GroupDetailScreen} />
-            <Stack.Screen name="Forums" component={ForumsScreen} />
-            <Stack.Screen name="ForumPostDetail" component={ForumPostDetailScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-            <Stack.Screen name="MessagesScreen" component={MessagesScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="NewMessageScreen" component={NewMessageScreen} />
-            <Stack.Screen name="ChatScreen" component={ChatScreen} />
-            <Stack.Screen name="Search" component={SearchScreen} />
-            <Stack.Screen
-              name="UserProfile"
-              component={UserProfileScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Profile',
-                headerTintColor: '#fff',
-                headerStyle: { backgroundColor: '#000' },
-              }}
-            />
-            <Stack.Screen
-              name="UserPostsFeed"
-              component={UserPostsFeedScreen}
-              options={{
-                headerShown: false,
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="FollowersList"
-              component={FollowersListScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="FollowingList"
-              component={FollowingListScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="FindMeet"
-              component={FindMeetScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="CreateMeet"
-              component={CreateMeetScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="MeetDetail"
-              component={MeetDetailScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-          </>
+          // User is logged in - only proceed if EULA status is determined
+          eulaAccepted === true ? (
+            // User has accepted EULA - show main app
+            <>
+              <Stack.Screen name="MainApp" component={MainApp} />
+              <Stack.Screen name="PostPreview" component={PostPreviewScreen} />
+              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+              <Stack.Screen name="Groups" component={GroupsScreen} />
+              <Stack.Screen name="GroupDetail" component={GroupDetailScreen} />
+              <Stack.Screen name="Forums" component={ForumsScreen} />
+              <Stack.Screen name="ForumPostDetail" component={ForumPostDetailScreen} />
+              <Stack.Screen name="Notifications" component={NotificationsScreen} />
+              <Stack.Screen name="MessagesScreen" component={MessagesScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="NewMessageScreen" component={NewMessageScreen} />
+              <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              <Stack.Screen name="Search" component={SearchScreen} />
+              <Stack.Screen
+                name="UserProfile"
+                component={UserProfileScreen}
+                options={{
+                  headerShown: true,
+                  headerTitle: 'Profile',
+                  headerTintColor: '#fff',
+                  headerStyle: { backgroundColor: '#000' },
+                }}
+              />
+              <Stack.Screen
+                name="UserPostsFeed"
+                component={UserPostsFeedScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name="FollowersList"
+                component={FollowersListScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="FollowingList"
+                component={FollowingListScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="FindMeet"
+                component={FindMeetScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="CreateMeet"
+                component={CreateMeetScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="MeetDetail"
+                component={MeetDetailScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </>
+          ) : (
+            // User logged in but hasn't accepted EULA - show EULA screen
+            <>
+              <Stack.Screen name="EulaAcceptance" component={EulaAcceptanceScreen} />
+              <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+              <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+            </>
+          )
         ) : (
+          // User not logged in - show auth flow
           <>
             <Stack.Screen name="Auth" component={AuthScreen} />
             <Stack.Screen name="OnboardingWelcome" component={OnboardingWelcomeScreen} />
             <Stack.Screen name="OnboardingProfilePicture" component={OnboardingProfilePictureScreen} />
+            <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
           </>
         )}
       </Stack.Navigator>
@@ -356,6 +398,32 @@ export default function App() {
       });
   }, []);
 
+  // Initialize Meet Cleanup Service
+  React.useEffect(() => {
+    console.log('[MEET CLEANUP] Initializing meet cleanup service...');
+    
+    // Start cleanup service after a short delay to not block app startup
+    const initTimer = setTimeout(() => {
+      try {
+        meetCleanupService.start();
+        console.log('[MEET CLEANUP] Auto-delete service started - meets will be deleted 12 hours after scheduled time');
+      } catch (error) {
+        console.error('[MEET CLEANUP] Failed to start cleanup service:', error);
+      }
+    }, 5000); // 5 second delay
+    
+    // Cleanup on app unmount
+    return () => {
+      clearTimeout(initTimer);
+      try {
+        meetCleanupService.stop();
+        console.log('[MEET CLEANUP] Auto-delete service stopped');
+      } catch (error) {
+        console.error('[MEET CLEANUP] Error stopping cleanup service:', error);
+      }
+    };
+  }, []);
+
   // Add notification diagnostic tools to global scope for easy testing
   React.useEffect(() => {
     if (__DEV__) {
@@ -373,6 +441,7 @@ export default function App() {
       console.log('🧪 global.testNotifications.simulateLike() - Simulate like notification');
       console.log('🧪 global.testNotifications.simulateComment() - Simulate comment notification');
       console.log('🧪 global.testNotifications.simulateFollow() - Simulate follow notification');
+      console.log('🧹 Meet cleanup tools also available - see meetCleanupService.js for details');
     }
   }, []);
 
@@ -397,6 +466,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    color: '#FFF',
+    fontSize: 16,
+    marginTop: 10,
   },
   uploadButton: {
     width: 60,

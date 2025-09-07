@@ -118,8 +118,10 @@ export function useEndlessFeed(userId?: string) {
         });
         
         if (!rows.length || rows.length < PAGE_SIZE) {
-          setHasMore(false);
-          console.log('No more posts available, setting hasMore to false');
+          console.log('Reached end of fresh content, enabling infinite loop mode');
+          // Don't set hasMore to false - social feeds should never end
+          // The maybeLoopFill function will handle recycling content
+          setHasMore(false); // This triggers loop mode in maybeLoopFill
         } else {
           const last = rows[rows.length - 1]!;
           beforeCursorRef.current = { created_at: last.created_at, id: last.id };
@@ -194,7 +196,7 @@ export function useEndlessFeed(userId?: string) {
     setRefreshing(false);
   }, [items, refreshing, userId, fetchOlder]);
 
-  // --- loop mode when no more fresh pages
+  // --- loop mode when no more fresh pages (infinite social feed)
   const maybeLoopFill = useCallback(() => {
     if (hasMore) return;
     
@@ -203,9 +205,12 @@ export function useEndlessFeed(userId?: string) {
     const endBuffer = currentItems.length - idx - 1;
     if (endBuffer > PRELOAD_AHEAD) return;
 
+    console.log('[ENDLESS FEED] Loop mode: recycling content for infinite scroll');
+
     const recent = new Set(recentIdsRef.current.slice(-COOLDOWN_RECENT));
     const candidates: Post[] = [];
     
+    // First, try to get non-recent content
     for (const p of currentItems) {
       if (!recent.has(p.id)) {
         candidates.push(p);
@@ -213,16 +218,29 @@ export function useEndlessFeed(userId?: string) {
       if (candidates.length >= PAGE_SIZE) break;
     }
     
-    // last resort if tiny dataset
-    let i = 0;
-    while (candidates.length < PAGE_SIZE && i < currentItems.length) {
-      candidates.push(currentItems[i++]);
+    // If not enough non-recent content, use shuffled existing content
+    if (candidates.length < PAGE_SIZE) {
+      const shuffled = [...currentItems].sort(() => Math.random() - 0.5);
+      for (const p of shuffled) {
+        if (candidates.length >= PAGE_SIZE) break;
+        if (!candidates.find(c => c.id === p.id)) {
+          candidates.push(p);
+        }
+      }
+    }
+    
+    // Last resort: duplicate everything to keep feed infinite
+    if (candidates.length === 0 && currentItems.length > 0) {
+      candidates.push(...currentItems.slice(0, Math.min(PAGE_SIZE, currentItems.length)));
     }
     
     if (candidates.length > 0) {
+      console.log(`[ENDLESS FEED] Added ${candidates.length} recycled posts to maintain infinite scroll`);
       setItems(prev => [...prev, ...candidates]);
+    } else {
+      console.log('[ENDLESS FEED] No content available to recycle, feed may appear empty');
     }
-  }, [hasMore]); // Remove items dependency
+  }, [hasMore]);
 
   // Use refs to avoid stale closures while preventing infinite loops
   const fetchOlderRef = useRef(fetchOlder);

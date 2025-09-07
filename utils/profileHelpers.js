@@ -106,10 +106,13 @@ export async function initializeUserProfile(userId, email = '') {
     const profileData = {
       id: userId,
       username: username,
+      email: email,
       bio: null,
       location: null,
       website_link: null,
       avatar_url: defaultAvatarUrl,
+      eula_accepted: false, // Default to false - user must accept EULA
+      eula_accepted_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -160,12 +163,66 @@ export async function ensureUserProfile(userId, email = '') {
       return existingProfile;
     }
     
-    // Profile doesn't exist, create it
-    console.log('Profile not found, creating new profile...');
+    // Profile doesn't exist - this shouldn't happen with the trigger
+    // But if it does, wait a moment and check again (trigger might be processing)
+    console.log('Profile not found, waiting for trigger to create it...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Check again after waiting
+    const { data: retryProfile, error: retryError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+      
+    if (!retryError && retryProfile) {
+      console.log('Profile created by trigger:', retryProfile);
+      return retryProfile;
+    }
+    
+    // If still no profile, create it as fallback
+    console.log('Profile still not found, creating new profile as fallback...');
     return await initializeUserProfile(userId, email);
     
   } catch (error) {
     console.error('Error ensuring user profile:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update user profile with new data
+ * @param {string} userId - User ID
+ * @param {object} updates - Profile fields to update
+ * @returns {Promise<object>} - Updated profile data
+ */
+export async function updateUserProfile(userId, updates) {
+  try {
+    console.log('[PROFILE] Updating profile for user:', userId, updates);
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+      .select();
+
+    if (error) {
+      console.error('[PROFILE] Error updating user profile:', error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.error('[PROFILE] No rows updated - profile may not exist');
+      throw new Error('Profile not found');
+    }
+
+    console.log('[PROFILE] Profile updated successfully:', data[0]);
+    return data[0];
+  } catch (error) {
+    console.error('[PROFILE] Unexpected error in updateUserProfile:', error);
     throw error;
   }
 }

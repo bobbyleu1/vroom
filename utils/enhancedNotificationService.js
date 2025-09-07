@@ -211,9 +211,9 @@ export async function savePushTokenEnhanced(token) {
 }
 
 /**
- * Complete push notification setup with user feedback
+ * Complete push notification setup with automatic handling (no user prompts)
  */
-export async function setupPushNotificationsWithFeedback(showUserPrompts = true) {
+export async function setupPushNotificationsWithFeedback(showUserPrompts = false) {
   console.log('🚀 [ENHANCED] Starting complete push notification setup...');
   
   // Step 1: Register for push notifications
@@ -222,23 +222,13 @@ export async function setupPushNotificationsWithFeedback(showUserPrompts = true)
   if (!registrationResult.success) {
     console.error('❌ [ENHANCED] Registration failed:', registrationResult);
     
-    if (showUserPrompts) {
-      if (registrationResult.error === 'PERMISSION_DENIED') {
-        Alert.alert(
-          'Notifications Disabled',
-          registrationResult.message + '\n\n' + registrationResult.userAction,
-          [
-            { text: 'Maybe Later', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Notifications.openSettingsAsync() }
-          ]
-        );
-      } else if (registrationResult.error !== 'SIMULATOR') {
-        Alert.alert(
-          'Notification Setup Failed',
-          registrationResult.message,
-          [{ text: 'OK' }]
-        );
-      }
+    // Silently handle failures without user prompts for better UX
+    if (registrationResult.error === 'PERMISSION_DENIED') {
+      console.log('📱 [ENHANCED] Notifications disabled by user - continuing silently');
+    } else if (registrationResult.error === 'SIMULATOR') {
+      console.log('📱 [ENHANCED] Running on simulator - notifications not available');
+    } else {
+      console.log('📱 [ENHANCED] Notification setup failed:', registrationResult.message);
     }
     
     return registrationResult;
@@ -251,24 +241,11 @@ export async function setupPushNotificationsWithFeedback(showUserPrompts = true)
   
   if (!saveResult.success) {
     console.error('❌ [ENHANCED] Token save failed:', saveResult);
-    
-    if (showUserPrompts) {
-      Alert.alert(
-        'Setup Error',
-        'Push notifications were enabled but could not be saved to your account. You may not receive notifications.',
-        [{ text: 'OK' }]
-      );
-    }
-    
+    console.log('📱 [ENHANCED] Push notifications enabled but could not save to account');
     return saveResult;
   }
 
   console.log('🎉 [ENHANCED] Push notification setup completed successfully!');
-  
-  if (showUserPrompts) {
-    // Optional success message - might be annoying, so make it subtle
-    console.log('🔔 Notifications are now enabled for your account');
-  }
   
   return { success: true, token: registrationResult.token, message: 'Push notifications enabled successfully' };
 }

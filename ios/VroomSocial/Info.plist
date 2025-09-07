@@ -17,7 +17,7 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
-    <string>APPL</string>
+    <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
     <key>CFBundleSignature</key>
@@ -58,50 +58,28 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>This app needs camera access to record videos and take photos for posts.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Vroom Social uses your location to provide location-based features like finding nearby meets.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Vroom Social needs your location to help you find nearby meets and events in your area.</string>
+    <string>Vroom Social uses your camera so you can record and share videos of your car with the community feed.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>This app needs microphone access to record videos with audio.</string>
-    <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to save photos</string>
+    <string>Vroom Social uses your microphone so you can record audio when filming videos to share with others.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>This app needs photo library access to select photos and videos for posts.</string>
-    <key>UIApplicationSceneManifest</key>
-    <dict>
-      <key>UIApplicationSupportsMultipleScenes</key>
-      <true/>
-      <key>UISceneConfigurations</key>
-      <dict>
-        <key>UIWindowSceneSessionRoleApplication</key>
-        <array>
-          <dict>
-            <key>UISceneConfigurationName</key>
-            <string>Default Configuration</string>
-            <key>UISceneDelegateClassName</key>
-            <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-          </dict>
-        </array>
-      </dict>
-    </dict>
+    <string>Vroom Social needs photo library access so you can upload pictures of your car to your profile and groups.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Vroom needs access to your location to help you find nearby meetups and events.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Vroom needs access to your location to help you find nearby meetups and events.</string>
     <key>UIBackgroundModes</key>
     <array>
       <string>remote-notification</string>
-      <string>location</string>
     </array>
     <key>UIDeviceFamily</key>
     <array>
       <integer>1</integer>
     </array>
-    <key>UILaunchScreen</key>
-    <dict/>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
-      <string>armv7</string>
+      <string>arm64</string>
     </array>
     <key>UIRequiresFullScreen</key>
     <true/>
@@ -110,15 +88,10 @@
     <key>UISupportedInterfaceOrientations</key>
     <array>
       <string>UIInterfaceOrientationPortrait</string>
-      <string>UIInterfaceOrientationLandscapeLeft</string>
-      <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UISupportedInterfaceOrientations~ipad</key>
     <array>
       <string>UIInterfaceOrientationPortrait</string>
-      <string>UIInterfaceOrientationPortraitUpsideDown</string>
-      <string>UIInterfaceOrientationLandscapeLeft</string>
-      <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UIUserInterfaceStyle</key>
     <string>Light</string>

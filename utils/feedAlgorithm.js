@@ -257,7 +257,7 @@ const getCandidatePosts = async (userId, limit = 100, excludePostIds = []) => {
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -289,7 +289,7 @@ const getCandidatePosts = async (userId, limit = 100, excludePostIds = []) => {
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -320,7 +320,7 @@ const getCandidatePosts = async (userId, limit = 100, excludePostIds = []) => {
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -496,7 +496,7 @@ export const generatePersonalizedFeed = async (userId, limit = 20, excludePostId
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -542,7 +542,7 @@ export const generateColdStartFeed = async (limit = 20, excludePostIds = []) => 
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -568,7 +568,7 @@ export const generateColdStartFeed = async (limit = 20, excludePostIds = []) => 
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -616,7 +616,7 @@ export const generateColdStartFeed = async (limit = 20, excludePostIds = []) => 
           author_id,
           hashtags,
           algorithm_score,
-          profiles (
+          profiles!posts_author_id_fkey (
             username,
             avatar_url
           )
@@ -640,7 +640,7 @@ export const generateColdStartFeed = async (limit = 20, excludePostIds = []) => 
           author_id,
           hashtags,
           algorithm_score,
-          profiles (
+          profiles!posts_author_id_fkey (
             username,
             avatar_url
           )
@@ -747,7 +747,7 @@ export const generateFeed = async (userId, limit = 20, excludePostIds = []) => {
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )
@@ -772,7 +772,7 @@ export const generateFeed = async (userId, limit = 20, excludePostIds = []) => {
         author_id,
         hashtags,
         algorithm_score,
-        profiles (
+        profiles!posts_author_id_fkey (
           username,
           avatar_url
         )

@@ -47,7 +47,12 @@ const CreateMeetScreen = ({ navigation }) => {
 
   // Handle form field changes
   const updateFormData = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    console.log(`[CREATE MEET] Updating ${field}:`, value);
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      console.log('[CREATE MEET] New form data:', newData);
+      return newData;
+    });
   };
 
   // Pick image for flyer
@@ -181,10 +186,11 @@ const CreateMeetScreen = ({ navigation }) => {
       return false;
     }
 
-    if (!selectedLocation) {
+    // Allow creating meets without GPS coordinates if user enters location manually
+    if (!selectedLocation && !formData.address.trim()) {
       Alert.alert(
-        'Missing Location',
-        'Please capture your current location or enter coordinates manually.'
+        'Missing Location Information',
+        'Please either capture your current location or enter a detailed address.'
       );
       return false;
     }
@@ -223,21 +229,27 @@ const CreateMeetScreen = ({ navigation }) => {
       meetDateTime.setMinutes(formData.time.getMinutes());
 
       // Create meet in database
+      const meetData = {
+        user_id: session.user.id,
+        title: formData.title.trim(),
+        description: formData.description.trim() || null,
+        location_name: formData.locationName.trim(),
+        address: formData.address.trim() || null,
+        flyer_url: flyerUrl,
+        date_time: meetDateTime.toISOString(),
+        starts_at: meetDateTime.toISOString(),
+        created_at: new Date().toISOString(),
+      };
+      
+      // Add coordinates only if location was captured
+      if (selectedLocation) {
+        meetData.latitude = selectedLocation.latitude;
+        meetData.longitude = selectedLocation.longitude;
+      }
+      
       const { data, error } = await supabase
         .from('meets')
-        .insert({
-          user_id: session.user.id,
-          title: formData.title.trim(),
-          description: formData.description.trim() || null,
-          location_name: formData.locationName.trim(),
-          address: formData.address.trim() || null,
-          latitude: selectedLocation.latitude,
-          longitude: selectedLocation.longitude,
-          flyer_url: flyerUrl,
-          date_time: meetDateTime.toISOString(),
-          starts_at: meetDateTime.toISOString(),
-          created_at: new Date().toISOString(),
-        })
+        .insert(meetData)
         .select()
         .single();
 
@@ -444,54 +456,132 @@ const CreateMeetScreen = ({ navigation }) => {
                 <View style={styles.dateTimeRow}>
                   <TouchableOpacity 
                     style={[styles.dateTimeButton, styles.dateButton]} 
-                    onPress={() => setShowDatePicker(true)}
+                    onPress={() => {
+                      console.log('[CREATE MEET] Date button pressed');
+                      setShowDatePicker(true);
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Ionicons name="calendar-outline" size={20} color="#00BFFF" />
                     <View style={styles.dateTimeTextContainer}>
                       <Text style={styles.dateTimeLabel}>Date</Text>
                       <Text style={styles.dateTimeValue}>{formatDate(formData.date)}</Text>
                     </View>
+                    <Ionicons name="chevron-down" size={16} color="#666" />
                   </TouchableOpacity>
 
                   <TouchableOpacity 
                     style={[styles.dateTimeButton, styles.timeButton]} 
-                    onPress={() => setShowTimePicker(true)}
+                    onPress={() => {
+                      console.log('[CREATE MEET] Time button pressed');
+                      setShowTimePicker(true);
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Ionicons name="time-outline" size={20} color="#00BFFF" />
                     <View style={styles.dateTimeTextContainer}>
                       <Text style={styles.dateTimeLabel}>Time</Text>
                       <Text style={styles.dateTimeValue}>{formatTime(formData.time)}</Text>
                     </View>
+                    <Ionicons name="chevron-down" size={16} color="#666" />
                   </TouchableOpacity>
                 </View>
 
                 {showDatePicker && (
-                  <DateTimePicker
-                    value={formData.date}
-                    mode="date"
-                    display="default"
-                    minimumDate={new Date()}
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(false);
-                      if (selectedDate) {
-                        updateFormData('date', selectedDate);
-                      }
-                    }}
-                  />
+                  <View style={styles.pickerContainer}>
+                    <DateTimePicker
+                      value={formData.date}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      minimumDate={new Date()}
+                      textColor="#FFFFFF"
+                      accentColor="#00BFFF"
+                      themeVariant="dark"
+                      style={[styles.datePicker, { backgroundColor: 'transparent' }]}
+                      onChange={(event, selectedDate) => {
+                        console.log('[CREATE MEET] Date picker onChange:', { event: event.type, selectedDate });
+                        
+                        if (Platform.OS === 'android') {
+                          setShowDatePicker(false);
+                        }
+                        
+                        if (event.type === 'dismissed') {
+                          setShowDatePicker(false);
+                          return;
+                        }
+                        
+                        if (selectedDate && event.type === 'set') {
+                          console.log('[CREATE MEET] Updating date to:', selectedDate);
+                          updateFormData('date', selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowDatePicker(false);
+                          }
+                        }
+                      }}
+                      onTouchCancel={() => {
+                        console.log('[CREATE MEET] Date picker cancelled');
+                        setShowDatePicker(false);
+                      }}
+                    />
+                  </View>
+                )}
+                
+                {/* iOS date picker done button */}
+                {showDatePicker && Platform.OS === 'ios' && (
+                  <TouchableOpacity 
+                    style={styles.pickerDoneButton} 
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.pickerDoneText}>Done</Text>
+                  </TouchableOpacity>
                 )}
 
                 {showTimePicker && (
-                  <DateTimePicker
-                    value={formData.time}
-                    mode="time"
-                    display="default"
-                    onChange={(event, selectedTime) => {
-                      setShowTimePicker(false);
-                      if (selectedTime) {
-                        updateFormData('time', selectedTime);
-                      }
-                    }}
-                  />
+                  <View style={styles.pickerContainer}>
+                    <DateTimePicker
+                      value={formData.time}
+                      mode="time"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      textColor="#FFFFFF"
+                      accentColor="#00BFFF"
+                      themeVariant="dark"
+                      style={[styles.timePicker, { backgroundColor: 'transparent' }]}
+                      onChange={(event, selectedTime) => {
+                        console.log('[CREATE MEET] Time picker onChange:', { event: event.type, selectedTime });
+                        
+                        if (Platform.OS === 'android') {
+                          setShowTimePicker(false);
+                        }
+                        
+                        if (event.type === 'dismissed') {
+                          setShowTimePicker(false);
+                          return;
+                        }
+                        
+                        if (selectedTime && event.type === 'set') {
+                          console.log('[CREATE MEET] Updating time to:', selectedTime);
+                          updateFormData('time', selectedTime);
+                          if (Platform.OS === 'android') {
+                            setShowTimePicker(false);
+                          }
+                        }
+                      }}
+                      onTouchCancel={() => {
+                        console.log('[CREATE MEET] Time picker cancelled');
+                        setShowTimePicker(false);
+                      }}
+                    />
+                  </View>
+                )}
+                
+                {/* iOS time picker done button */}
+                {showTimePicker && Platform.OS === 'ios' && (
+                  <TouchableOpacity 
+                    style={styles.pickerDoneButton} 
+                    onPress={() => setShowTimePicker(false)}
+                  >
+                    <Text style={styles.pickerDoneText}>Done</Text>
+                  </TouchableOpacity>
                 )}
               </View>
 
@@ -709,6 +799,45 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFF',
     marginLeft: 8,
+  },
+  pickerDoneButton: {
+    backgroundColor: '#00BFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  pickerDoneText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pickerContainer: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 12,
+    marginVertical: 10,
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#00BFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  datePicker: {
+    width: '100%',
+    height: 180,
+  },
+  timePicker: {
+    width: '100%',
+    height: 180,
   },
 });
 

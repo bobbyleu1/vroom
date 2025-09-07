@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../utils/supabase';
+import { ensureUserProfile, updateUserProfile } from '../utils/profileHelpers';
 
 export default function OnboardingProfilePictureScreen({ route, navigation }) {
   const { userData } = route.params;
@@ -100,10 +101,17 @@ export default function OnboardingProfilePictureScreen({ route, navigation }) {
 
       console.log('Creating account with data:', userData);
 
-      // Create the account
+      // Create the account with user metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
+        options: {
+          data: {
+            username: userData.username,
+            first_name: userData.firstName,
+            last_name: userData.lastName,
+          }
+        }
       });
 
       if (authError) {
@@ -112,29 +120,48 @@ export default function OnboardingProfilePictureScreen({ route, navigation }) {
 
       console.log('Account created successfully:', authData);
 
-      // Wait a moment for the profile trigger to create the initial profile row
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait a moment for the trigger to create the profile, then ensure it exists
+      console.log('Waiting for profile creation trigger...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('Ensuring user profile exists...');
+      await ensureUserProfile(authData.user.id, userData.email);
 
-      // Update the user's profile with collected data
-      const { data: updatedProfile, error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          username: userData.username,
-          email: userData.email,
+      // Update the user's profile with collected data (including avatar)
+      try {
+        const profileUpdates = {
           avatar_url: avatarUrl,
-          bio: `${userData.firstName} ${userData.lastName} - Automotive enthusiast`,
-        })
-        .eq('id', authData.user.id)
-        .select();
-
-      if (profileError) {
-        console.error('Error updating profile:', profileError);
-        Alert.alert(
-          'Profile Update Failed',
-          'Account created but profile update failed. You can update your profile later in settings.'
-        );
-      } else {
+        };
+        
+        // Only update username/bio if they differ from what the trigger should have set
+        // This prevents overwriting correct data with wrong data
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('username, bio')
+          .eq('id', authData.user.id)
+          .single();
+          
+        if (currentProfile) {
+          // Update username only if it's different from what we expect
+          if (currentProfile.username !== userData.username) {
+            profileUpdates.username = userData.username;
+            console.log('Correcting username from', currentProfile.username, 'to', userData.username);
+          }
+          
+          // Update bio with full name if not already set by trigger
+          const expectedBio = `${userData.firstName} ${userData.lastName} - Automotive enthusiast`;
+          if (!currentProfile.bio || currentProfile.bio !== expectedBio) {
+            profileUpdates.bio = expectedBio;
+            console.log('Setting bio to:', expectedBio);
+          }
+        }
+        
+        const updatedProfile = await updateUserProfile(authData.user.id, profileUpdates);
         console.log('Profile updated successfully:', updatedProfile);
+      } catch (profileError) {
+        console.error('Error updating profile:', profileError);
+        // Don't show error to user unless it's critical - they can update later
+        console.log('Profile update failed but account was created successfully');
       }
 
       Alert.alert(

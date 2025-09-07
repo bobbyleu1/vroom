@@ -103,6 +103,9 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
   const [isSaved, setIsSaved] = useState(Boolean(item?.saved_by_user));
   const [savePending, setSavePending] = useState(false);
   const [showPlayIcon, setShowPlayIcon] = useState(false);
+  const [isVideoLoading, setIsVideoLoading] = useState(true);
+  const [showThumbnail, setShowThumbnail] = useState(true);
+  const [avatarError, setAvatarError] = useState(false);
   
   // Double tap detection
   const lastTap = useRef(null);
@@ -613,32 +616,74 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
           defaultSource={require('../assets/video-placeholder.png')}
         />
       ) : (
-        <VroomPlayer
-          ref={videoRef}
-          videoUrl={item.media_url}
-          playbackId={item.playback_id}
-          posterSource={item.thumbnail_url}
-          title={item.content}
-          postId={item.id}
-          userId={currentUserId}
-          style={{ width: '100%', height: '100%' }}
-          repeat={true}
-          paused={!isPlaying}
-          muted={isMuted}
-          onLoad={(data) => {
-            console.log(`[VideoCard ${item.id}] Video loaded - duration: ${data.duration}s`);
-          }}
-          onBuffer={({ isBuffering }) => {
-            if (isBuffering) {
-              console.log(`[VideoCard ${item.id}] Video buffering...`);
-            } else {
-              console.log(`[VideoCard ${item.id}] Video ready to play`);
-            }
-          }}
-          onError={(error) => {
-            console.error(`[VideoCard ${item.id}] Video error:`, error);
-          }}
-        />
+        <View style={{ position: 'relative', width: '100%', height: '100%' }}>
+          <VroomPlayer
+            ref={videoRef}
+            videoUrl={item.media_url}
+            playbackId={item.playback_id}
+            posterSource={item.thumbnail_url}
+            title={item.content}
+            postId={item.id}
+            userId={currentUserId}
+            style={{ width: '100%', height: '100%' }}
+            repeat={true}
+            paused={!isPlaying}
+            muted={isMuted}
+            onVideoLoadStart={() => {
+              setIsVideoLoading(true);
+              setShowThumbnail(true);
+            }}
+            onLoad={(data) => {
+              console.log(`[VideoCard ${item.id}] Video loaded - duration: ${data.duration}s`);
+              setIsVideoLoading(false);
+              // Keep thumbnail visible for a short moment to ensure smooth transition
+              setTimeout(() => setShowThumbnail(false), 200);
+            }}
+            onBuffer={({ isBuffering }) => {
+              if (isBuffering && !showThumbnail) {
+                console.log(`[VideoCard ${item.id}] Video buffering, showing thumbnail...`);
+                setShowThumbnail(true);
+              } else if (!isBuffering && !isVideoLoading) {
+                console.log(`[VideoCard ${item.id}] Video ready to play`);
+                setTimeout(() => setShowThumbnail(false), 100);
+              }
+            }}
+            onError={(error) => {
+              console.error(`[VideoCard ${item.id}] Video error:`, error);
+              setShowThumbnail(true); // Keep thumbnail visible on error
+            }}
+          />
+          
+          {/* Thumbnail overlay to prevent black screens */}
+          {(showThumbnail && item.thumbnail_url) && (
+            <View style={styles.thumbnailOverlay}>
+              <Image
+                source={{ uri: item.thumbnail_url }}
+                style={styles.thumbnailImage}
+                resizeMode="cover"
+                onError={() => {
+                  console.log(`[VideoCard ${item.id}] Thumbnail failed to load:`, item.thumbnail_url);
+                }}
+              />
+              {isVideoLoading && (
+                <View style={styles.loadingOverlay}>
+                  <View style={styles.loadingIndicator}>
+                    <Text style={styles.loadingText}>Loading...</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {/* Fallback loading state when no thumbnail available */}
+          {(isVideoLoading && !item.thumbnail_url) && (
+            <View style={styles.noThumbnailLoading}>
+              <View style={styles.loadingIndicator}>
+                <Text style={styles.loadingText}>Loading video...</Text>
+              </View>
+            </View>
+          )}
+        </View>
       )}
       
       {/* Tap area for video controls */}
@@ -711,10 +756,11 @@ const VideoCard = React.memo(({ item, index, currentVideoIndex, navigation, onCo
         }
       ]}>
         <Image 
-          source={getProfileImageSource(item.profiles?.avatar_url)} 
+          source={avatarError ? require('../assets/default-profile.png') : getProfileImageSource(item.profiles?.avatar_url)} 
           style={styles.avatar}
           onError={(error) => {
             console.log('VideoCard: Avatar load error for URL:', item.profiles?.avatar_url, 'Error:', error.nativeEvent.error);
+            setAvatarError(true);
           }}
         />
       </TouchableOpacity>
@@ -891,6 +937,51 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  thumbnailOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1a1a1a', // Dark gray instead of pure black
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  loadingIndicator: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  noThumbnailLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a', // Dark gray background instead of black
+    zIndex: 2,
   },
 });
 

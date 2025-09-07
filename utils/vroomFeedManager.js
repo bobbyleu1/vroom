@@ -6,9 +6,9 @@ export class VroomFeedManager {
   
   // Session-based tracking to prevent repetition within same session
   static sessionCache = new Map(); // userId -> { shownPostIds: Set, recentAuthors: Array, sessionStart: timestamp }
-  static SESSION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
-  static MAX_CONSECUTIVE_FROM_AUTHOR = 0; // ZERO posts per author before switching - no clustering allowed
-  static RECENT_AUTHOR_MEMORY = 10; // Remember last 10 authors to avoid clustering
+  static SESSION_DURATION_MS = 10 * 60 * 1000; // 10 minutes (reduced from 30)
+  static MAX_CONSECUTIVE_FROM_AUTHOR = 2; // Allow 2 posts per author before switching
+  static RECENT_AUTHOR_MEMORY = 5; // Remember last 5 authors only (reduced from 10)
   
   /**
    * Initialize or refresh session tracking for user
@@ -68,69 +68,65 @@ export class VroomFeedManager {
   }
   
   /**
-   * Filter posts for diversity - avoid repeats and author clustering
+   * Filter posts for diversity - minimal filtering to allow fresh content
    */
   static filterForDiversity(userId, posts, maxSizeNeeded = 15) {
     const session = this.initUserSession(userId);
     
     console.log(`[DIVERSITY] Starting with ${posts.length} posts, need ${maxSizeNeeded}`);
     
-    // Much less aggressive filtering - just filter obviously seen posts
-    const recentlySeenIds = new Set([...session.shownPostIds].slice(-10)); // Only last 10 seen
+    // Only filter out posts seen in the last 5 posts (much more permissive)
+    const recentlySeenIds = new Set([...session.shownPostIds].slice(-5)); // Only last 5 seen
     const unseenPosts = posts.filter(post => !recentlySeenIds.has(post.id));
-    console.log(`[DIVERSITY] After filtering recently seen: ${unseenPosts.length} unseen`);
+    console.log(`[DIVERSITY] After filtering very recently seen: ${unseenPosts.length} unseen`);
     
-    // If we don't have enough unseen posts, just return what we have
-    if (unseenPosts.length < maxSizeNeeded) {
-      console.log('[DIVERSITY] Not enough unseen posts, returning all available');
-      return unseenPosts.slice(0, maxSizeNeeded);
-    }
-    
-    // Light diversity filtering - just avoid immediate repeats
-    const diversifiedPosts = [];
-    const usedAuthors = new Set();
-    const lastAuthor = session.recentAuthors[session.recentAuthors.length - 1];
-    
-    // FIRST PASS: Avoid just the last author to prevent immediate repeats
-    for (const post of unseenPosts) {
-      if (diversifiedPosts.length >= maxSizeNeeded) break;
+    // If we have enough unseen posts, use them. Otherwise, allow repeats for fresh content
+    if (unseenPosts.length >= maxSizeNeeded) {
+      // We have plenty of unseen content
+      const selectedPosts = unseenPosts.slice(0, maxSizeNeeded);
+      console.log(`[DIVERSITY] Using ${selectedPosts.length} unseen posts`);
       
-      const authorId = post.author_id;
-      
-      // Only skip if this is the exact same author as the last post
-      if (authorId === lastAuthor && diversifiedPosts.length === 0) {
-        continue; // Skip only the first post if it's from same author
-      }
-      
-      diversifiedPosts.push(post);
-      usedAuthors.add(authorId);
-    }
-    
-    console.log(`[DIVERSITY] After light filtering: ${diversifiedPosts.length} posts`);
-    
-    // If we still need more, just add any remaining posts
-    if (diversifiedPosts.length < maxSizeNeeded) {
-      const remaining = unseenPosts.filter(post => !diversifiedPosts.includes(post));
-      diversifiedPosts.push(...remaining.slice(0, maxSizeNeeded - diversifiedPosts.length));
-    }
-    
-    console.log(`[DIVERSITY] FINAL: ${diversifiedPosts.length} posts returned`);
-    
-    // Track these posts as shown
-    diversifiedPosts.forEach(post => {
-      if (post.id) {
-        session.shownPostIds.add(post.id);
-      }
-      if (post.author_id) {
-        session.recentAuthors.push(post.author_id);
-        // Keep recent authors array manageable
-        if (session.recentAuthors.length > this.RECENT_AUTHOR_MEMORY) {
-          session.recentAuthors.shift();
+      // Track these posts as shown
+      selectedPosts.forEach(post => {
+        if (post.id) {
+          session.shownPostIds.add(post.id);
         }
-      }
-    });
-    
-    return diversifiedPosts;
+        if (post.author_id) {
+          session.recentAuthors.push(post.author_id);
+          if (session.recentAuthors.length > this.RECENT_AUTHOR_MEMORY) {
+            session.recentAuthors.shift();
+          }
+        }
+      });
+      
+      return selectedPosts;
+    } else {
+      // Not enough unseen content - allow repeats but prioritize unseen
+      const availablePosts = [...unseenPosts];
+      
+      // Fill remaining slots with any posts (allow repeats for fresh experience)
+      const remainingNeeded = maxSizeNeeded - availablePosts.length;
+      const allPosts = posts.filter(post => !availablePosts.some(p => p.id === post.id));
+      const additionalPosts = allPosts.slice(0, remainingNeeded);
+      
+      const finalPosts = [...availablePosts, ...additionalPosts];
+      console.log(`[DIVERSITY] Using ${availablePosts.length} unseen + ${additionalPosts.length} repeated = ${finalPosts.length} total`);
+      
+      // Track these posts as shown
+      finalPosts.forEach(post => {
+        if (post.id) {
+          session.shownPostIds.add(post.id);
+        }
+        if (post.author_id) {
+          session.recentAuthors.push(post.author_id);
+          if (session.recentAuthors.length > this.RECENT_AUTHOR_MEMORY) {
+            session.recentAuthors.shift();
+          }
+        }
+      });
+      
+      return finalPosts;
+    }
   }
   
   /**
@@ -152,70 +148,61 @@ export class VroomFeedManager {
       let feedData = [];
       
       if (!lastPostId) {
-        // Initial load - use smart feed for fresh content
-        const { data, error } = await supabase.rpc('get_smart_feed', {
-          user_uuid: userId,
-          batch_size: batchSize
-        });
+        // Initial load - get fresh randomized content every time
+        console.log('[VROOM FEED] Loading fresh initial feed...');
         
-        if (error) {
-          console.error('[VROOM FEED] Error loading smart feed:', error);
-          // Fallback to fast feed
-          const { data: fastData, error: fastError } = await supabase.rpc('get_fast_feed', {
-            user_uuid: userId,
-            batch_size: batchSize
-          });
+        const { data: initialData, error: initialError } = await supabase
+          .from('posts')
+          .select(`
+            id, created_at, content, author_id, media_url, mux_hls_url,
+            mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
+            like_count, comment_count, view_count,
+            profiles!posts_author_id_fkey (username, avatar_url)
+          `)
+          .not('media_url', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(batchSize * 3); // Get more posts for better randomization
+        
+        if (!initialError && initialData && initialData.length > 0) {
+          // Randomize the order for fresh experience every time
+          const shuffledData = [...initialData].sort(() => Math.random() - 0.5);
+          const selectedPosts = shuffledData.slice(0, batchSize);
           
-          if (fastError) {
-            console.error('[VROOM FEED] Error loading fast feed fallback:', fastError);
-            // Final fallback to simple query
-            console.log('[VROOM FEED] Using direct query fallback...');
-            const { data: directData, error: directError } = await supabase
-              .from('posts')
-              .select(`
-                id, created_at, content, author_id, media_url, mux_hls_url,
-                mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
-                like_count, comment_count, view_count,
-                profiles!inner (username, avatar_url)
-              `)
-              .not('media_url', 'is', null)
-              .order('created_at', { ascending: false })
-              .limit(batchSize);
-            
-            if (directError) {
-              console.error('[VROOM FEED] Direct query also failed:', directError);
-              return { posts: [], hasMore: false, error: directError };
-            }
-            
-            feedData = (directData || []).map(post => ({
+          feedData = selectedPosts.map(post => ({
+            ...post,
+            username: post.profiles?.username,
+            avatar_url: post.profiles?.avatar_url,
+            type: 'content',
+            engagement_score: (post.like_count || 0) + (post.comment_count || 0),
+            is_fresh_initial: true
+          }));
+          
+          console.log(`[VROOM FEED] Fresh randomized initial load: ${feedData.length} posts`);
+        } else {
+          console.error('[VROOM FEED] Error loading initial feed:', initialError);
+          // Fallback to any available posts
+          const { data: fallbackData } = await supabase
+            .from('posts')
+            .select(`
+              id, created_at, content, author_id, media_url, mux_hls_url,
+              mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
+              like_count, comment_count, view_count,
+              profiles!posts_author_id_fkey (username, avatar_url)
+            `)
+            .not('media_url', 'is', null)
+            .limit(batchSize);
+          
+          if (fallbackData && fallbackData.length > 0) {
+            feedData = fallbackData.map(post => ({
               ...post,
               username: post.profiles?.username,
               avatar_url: post.profiles?.avatar_url,
               type: 'content',
               engagement_score: (post.like_count || 0) + (post.comment_count || 0),
-              is_recycled: false
+              is_fallback: true
             }));
-            
-            console.log(`[VROOM FEED] Direct query fallback loaded ${feedData.length} posts`);
-          } else {
-            feedData = fastData || [];
-            
-            // Apply diversity filtering to fallback too
-            if (feedData.length > 0) {
-              feedData = this.filterForDiversity(userId, feedData, batchSize);
-              console.log(`[VROOM FEED] Fast feed fallback after diversity filtering: ${feedData.length} posts`);
-            }
+            console.log(`[VROOM FEED] Fallback initial load: ${feedData.length} posts`);
           }
-        } else {
-          feedData = data || [];
-        }
-        
-        // Apply diversity filtering to initial load too
-        if (feedData.length > 0) {
-          feedData = this.filterForDiversity(userId, feedData, batchSize);
-          console.log(`[VROOM FEED] Smart initial load after diversity filtering: ${feedData.length} posts`);
-        } else {
-          console.log(`[VROOM FEED] Smart initial load: ${feedData.length} posts`);
         }
       } else {
         // Pagination - get more content with simple query
@@ -230,7 +217,7 @@ export class VroomFeedManager {
             id, created_at, content, author_id, media_url, mux_hls_url, 
             mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
             like_count, comment_count, view_count,
-            profiles!inner (username, avatar_url)
+            profiles!posts_author_id_fkey (username, avatar_url)
           `)
           .neq('author_id', userId)
           .not('media_url', 'is', null)
@@ -263,7 +250,7 @@ export class VroomFeedManager {
               id, created_at, content, author_id, media_url, mux_hls_url,
               mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
               like_count, comment_count, view_count,
-              profiles!inner (username, avatar_url),
+              profiles!posts_author_id_fkey (username, avatar_url),
               seen_posts!inner (seen_at)
             `)
             .neq('author_id', userId)
@@ -310,7 +297,7 @@ export class VroomFeedManager {
               id, created_at, content, author_id, media_url, mux_hls_url,
               mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
               like_count, comment_count, view_count,
-              profiles!inner (username, avatar_url)
+              profiles!posts_author_id_fkey (username, avatar_url)
             `)
             .neq('author_id', userId)
             .not('media_url', 'is', null)
@@ -346,7 +333,7 @@ export class VroomFeedManager {
             id, created_at, content, author_id, media_url, mux_hls_url,
             mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
             like_count, comment_count, view_count,
-            profiles!inner (username, avatar_url)
+            profiles!posts_author_id_fkey (username, avatar_url)
           `)
           .neq('author_id', userId)
           .not('media_url', 'is', null)
@@ -398,7 +385,7 @@ export class VroomFeedManager {
                 id, created_at, content, author_id, media_url, mux_hls_url,
                 mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
                 like_count, comment_count, view_count,
-                profiles!inner (username, avatar_url)
+                profiles!posts_author_id_fkey (username, avatar_url)
               `)
               .neq('author_id', userId)
               .not('media_url', 'is', null)
@@ -450,6 +437,37 @@ export class VroomFeedManager {
       
     } catch (err) {
       console.error('[VROOM FEED] Exception loading feed:', err);
+      
+      // Last resort fallback - try to get ANY posts to prevent empty feed
+      try {
+        console.log('[VROOM FEED] Attempting emergency fallback...');
+        const { data: emergencyData, error: emergencyError } = await supabase
+          .from('posts')
+          .select(`
+            *,
+            profiles!posts_author_id_fkey (username, avatar_url)
+          `)
+          .not('media_url', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (!emergencyError && emergencyData && emergencyData.length > 0) {
+          const emergencyPosts = emergencyData.map(post => ({
+            ...post,
+            username: post.profiles?.username || 'User',
+            avatar_url: post.profiles?.avatar_url || null,
+            type: 'content',
+            engagement_score: (post.like_count || 0) + (post.comment_count || 0),
+            is_emergency_fallback: true
+          }));
+          
+          console.log(`[VROOM FEED] Emergency fallback successful: ${emergencyPosts.length} posts`);
+          return { posts: emergencyPosts, hasMore: true, error: null };
+        }
+      } catch (emergencyErr) {
+        console.error('[VROOM FEED] Emergency fallback also failed:', emergencyErr);
+      }
+      
       return { posts: [], hasMore: false, error: err };
     }
   }
@@ -589,33 +607,46 @@ export class VroomFeedManager {
     try {
       console.log('[VROOM FEED] Refreshing feed with fresh content...');
       
-      // Reset session on manual refresh to allow seeing fresh content
+      // Clear session completely for truly fresh content
       this.sessionCache.delete(userId);
-      console.log('[VROOM FEED] Session reset for fresh content');
+      console.log('[VROOM FEED] Session cleared for fresh content');
       
-      // Use get_smart_feed for truly fresh content
-      const { data: smartData, error: smartError } = await supabase.rpc('get_smart_feed', {
-        user_uuid: userId,
-        batch_size: batchSize
-      });
+      // Get fresh posts with randomized ordering
+      const { data: freshData, error: freshError } = await supabase
+        .from('posts')
+        .select(`
+          id, created_at, content, author_id, media_url, mux_hls_url,
+          mux_playback_id, mux_duration_ms, thumbnail_url, file_type,
+          like_count, comment_count, view_count,
+          profiles!posts_author_id_fkey (username, avatar_url)
+        `)
+        .not('media_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(batchSize * 2); // Get more posts for better randomization
       
-      if (smartError) {
-        console.error('[VROOM FEED] Error with get_smart_feed:', smartError);
-        // Final fallback to regular getFeed
+      if (freshError || !freshData || freshData.length === 0) {
+        console.error('[VROOM FEED] Error getting fresh posts:', freshError);
+        // Fallback to regular getFeed
         return this.getFeed(userId, batchSize);
       }
       
-      // Apply diversity filtering to refresh data too
-      let diverseData = smartData || [];
-      if (diverseData.length > 0) {
-        diverseData = this.filterForDiversity(userId, diverseData, batchSize);
-        console.log(`[VROOM FEED] Refresh after diversity filtering: ${diverseData.length} posts`);
-      }
+      // Randomize the order for fresh experience
+      const shuffledData = [...freshData].sort(() => Math.random() - 0.5);
+      const selectedPosts = shuffledData.slice(0, batchSize);
       
-      const processedPosts = this.processFeedData(diverseData);
+      // Process the fresh data
+      const processedPosts = selectedPosts.map(post => ({
+        ...post,
+        username: post.profiles?.username,
+        avatar_url: post.profiles?.avatar_url,
+        type: 'content',
+        engagement_score: (post.like_count || 0) + (post.comment_count || 0),
+        is_fresh: true
+      }));
+      
       const postsWithAds = this.insertAds(processedPosts);
       
-      console.log(`[VROOM FEED] Refresh successful: ${processedPosts.length} diverse posts with ${postsWithAds.length - processedPosts.length} ads`);
+      console.log(`[VROOM FEED] Refresh successful: ${processedPosts.length} fresh randomized posts`);
       
       return {
         posts: postsWithAds,
@@ -625,7 +656,8 @@ export class VroomFeedManager {
       
     } catch (err) {
       console.error('[VROOM FEED] Exception during refresh:', err);
-      // Fallback to regular getFeed
+      // Clear session and fallback
+      this.sessionCache.delete(userId);
       return this.getFeed(userId, batchSize);
     }
   }

@@ -1,6 +1,5 @@
 import * as Location from 'expo-location';
 import { Alert, Linking, Platform } from 'react-native';
-import { getSystemVersion } from 'react-native';
 
 export const LOCATION_ACCURACY = {
   LOW: Location.Accuracy.Low,
@@ -32,43 +31,44 @@ class LocationService {
     if (Platform.OS !== 'ios') return false;
     
     try {
-      const version = getSystemVersion();
-      const [major, minor] = version.split('.').map(v => parseInt(v));
-      console.log(`[LOCATION] Detected iOS version: ${version}, major: ${major}, minor: ${minor}`);
+      const version = Platform.constants.osVersion || Platform.Version;
+      console.log(`[LOCATION] Detected iOS version: ${version}`);
       
-      // Disable on all iOS 18.x versions for safety
-      // Expo Location has compatibility issues across iOS 18
-      if (major === 18) {
-        console.log(`[LOCATION] Detected iOS 18.${minor} - location will be disabled for safety`);
-        return true;
+      // Parse version string
+      if (typeof version === 'string') {
+        const [major, minor] = version.split('.').map(v => parseInt(v));
+        
+        // For iOS 18.5, let's try to make location work but with better error handling
+        if (major === 18) {
+          console.log(`[LOCATION] Detected iOS 18.${minor} - using careful location handling`);
+          // Don't disable completely, but be more careful
+          return false;
+        }
       }
       
-      return false; // Allow location on other versions
+      return false; // Allow location on all versions
     } catch (error) {
       console.error('[LOCATION] Error detecting iOS version:', error);
-      // If we can't detect, be cautious but not completely restrictive
       return false; // Allow location by default
     }
   }
 
   /**
-   * Check current location permission status with iOS 18 complete bypass
+   * Check current location permission status 
    */
   async checkPermissionStatus() {
-    // Complete bypass for iOS 18
-    if (this.isIOS18OrLater) {
-      console.log('[LOCATION] iOS 18+ detected - bypassing permission check');
-      return { granted: false, canAskAgain: false, denied: true, status: 'denied' };
-    }
+    console.log('[LOCATION] Checking permission status...');
 
     try {
-      // Add timeout to prevent hanging on other iOS versions
+      // Use shorter timeout for iOS 18 compatibility
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Permission check timeout')), 5000);
+        setTimeout(() => reject(new Error('Permission check timeout')), 3000);
       });
 
       const permissionPromise = Location.getForegroundPermissionsAsync();
       const { status } = await Promise.race([permissionPromise, timeoutPromise]);
+      
+      console.log(`[LOCATION] Current permission status: ${status}`);
       
       return {
         granted: status === 'granted',
@@ -77,67 +77,36 @@ class LocationService {
         status
       };
     } catch (error) {
-      console.error('Error checking location permission:', error);
-      return { granted: false, canAskAgain: false, denied: true, status: 'denied' };
+      console.error('[LOCATION] Error checking permission:', error.message);
+      return { granted: false, canAskAgain: true, denied: false, status: 'undetermined' };
     }
   }
 
   /**
-   * Request location permission with iOS 18 complete bypass
+   * Request location permission with better iOS 18 handling
    */
   async requestPermission() {
-    // Complete bypass for iOS 18
-    if (this.isIOS18OrLater) {
-      console.log('[LOCATION] iOS 18+ detected - bypassing permission request');
-      throw new Error(LOCATION_ERROR_TYPES.PERMISSION_DENIED);
-    }
+    console.log('[LOCATION] Requesting location permission...');
+    
     try {
-      // First check current status with timeout
-      let existingStatus;
-      try {
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Permission check timeout')), 5000);
-        });
-        const permissionPromise = Location.getForegroundPermissionsAsync();
-        const result = await Promise.race([permissionPromise, timeoutPromise]);
-        existingStatus = result.status;
-      } catch (checkError) {
-        console.warn('Permission check failed, assuming undetermined:', checkError);
-        existingStatus = 'undetermined';
-      }
+      // Direct permission request with shorter timeout for iOS 18
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 8000);
+      });
+
+      const requestPromise = Location.requestForegroundPermissionsAsync();
+      const { status } = await Promise.race([requestPromise, timeoutPromise]);
       
-      if (existingStatus === 'granted') {
-        return { granted: true, status: existingStatus };
-      }
-
-      if (existingStatus === 'denied') {
-        // Permission was previously denied, show settings alert
-        return this.showSettingsAlert();
-      }
-
-      // Request permission for the first time with timeout
-      let status;
-      try {
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Permission request timeout')), 10000);
-        });
-        const requestPromise = Location.requestForegroundPermissionsAsync();
-        const result = await Promise.race([requestPromise, timeoutPromise]);
-        status = result.status;
-      } catch (requestError) {
-        console.error('Permission request failed:', requestError);
-        // If request fails on iOS 18, try to gracefully handle
-        throw new Error('Location permission request failed. Please enable location access in Settings.');
-      }
+      console.log(`[LOCATION] Permission request result: ${status}`);
       
       if (status === 'granted') {
         return { granted: true, status };
       } else if (status === 'denied') {
-        // User just denied permission, show settings alert
+        // Show settings alert
         return this.showSettingsAlert();
+      } else {
+        return { granted: false, status };
       }
-
-      return { granted: false, status };
     } catch (error) {
       console.error('Error requesting location permission:', error);
       throw error;
@@ -150,57 +119,23 @@ class LocationService {
   showSettingsAlert() {
     return new Promise((resolve) => {
       Alert.alert(
-        'Location Access Required',
-        'To find meets near you, please allow location access.',
+        'Location Permission Required',
+        'To find nearby meetups, please enable location access in Settings.',
         [
           {
-            text: 'Cancel',
+            text: 'Not Now',
             style: 'cancel',
             onPress: () => resolve({ granted: false, status: 'denied' }),
           },
           {
-            text: 'Allow',
+            text: 'Open Settings',
             onPress: async () => {
               try {
-                // First try to request permission again
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                
-                if (status === 'granted') {
-                  resolve({ granted: true, status });
-                } else if (status === 'denied') {
-                  // If still denied, then go to settings
-                  Alert.alert(
-                    'Location Permission Required',
-                    'Location access is required to find nearby meets. Please enable it in Settings.',
-                    [
-                      {
-                        text: 'Not Now',
-                        style: 'cancel',
-                        onPress: () => resolve({ granted: false, status: 'denied' }),
-                      },
-                      {
-                        text: 'Open Settings',
-                        onPress: async () => {
-                          try {
-                            await Linking.openSettings();
-                            // After user returns from settings, check permission again
-                            setTimeout(async () => {
-                              const result = await this.checkPermissionStatus();
-                              resolve(result);
-                            }, 1000);
-                          } catch (error) {
-                            console.error('Error opening settings:', error);
-                            resolve({ granted: false, status: 'denied' });
-                          }
-                        },
-                      },
-                    ]
-                  );
-                } else {
-                  resolve({ granted: false, status });
-                }
+                console.log('[LOCATION] Opening Settings app...');
+                await Linking.openSettings();
+                resolve({ granted: false, status: 'denied' });
               } catch (error) {
-                console.error('Error requesting permission:', error);
+                console.error('[LOCATION] Error opening settings:', error);
                 resolve({ granted: false, status: 'denied' });
               }
             },
@@ -212,13 +147,14 @@ class LocationService {
   }
 
   /**
-   * Get current location with iOS 18 complete bypass
+   * Get current location with iOS 18 cautious handling
    */
   async getCurrentLocation(options = {}) {
-    // Complete bypass for iOS 18 - immediately throw error
+    // For iOS 18+, still try but with shorter timeouts and better error handling
     if (this.isIOS18OrLater) {
-      console.log('[LOCATION] iOS 18+ detected - bypassing location access completely');
-      throw new Error(LOCATION_ERROR_TYPES.PERMISSION_DENIED);
+      console.log('[LOCATION] iOS 18+ detected - using cautious location access with shorter timeouts');
+      // Reduce timeouts for iOS 18 but still try
+      options.timeout = Math.min(options.timeout || 15000, 8000);
     }
     const {
       accuracy = LOCATION_ACCURACY.BALANCED,
@@ -391,13 +327,12 @@ class LocationService {
   }
 
   /**
-   * Get location with fallback - iOS 18 complete bypass
+   * Get location with fallback - iOS 18 cautious handling
    */
   async getLocationWithFallback() {
-    // Complete bypass for iOS 18
+    // For iOS 18+, still try fallback but with shorter timeouts
     if (this.isIOS18OrLater) {
-      console.log('[LOCATION] iOS 18+ detected - bypassing fallback location access');
-      throw new Error(LOCATION_ERROR_TYPES.PERMISSION_DENIED);
+      console.log('[LOCATION] iOS 18+ detected - using cautious fallback location access');
     }
     try {
       return await this.getCurrentLocation();
@@ -434,13 +369,12 @@ class LocationService {
   }
 
   /**
-   * Safe location check - iOS 18 complete bypass
+   * Safe location check - iOS 18 cautious handling
    */
   async safeLocationCheck() {
-    // Complete bypass for iOS 18
+    // For iOS 18+, still check but with shorter timeout
     if (this.isIOS18OrLater) {
-      console.log('[LOCATION] iOS 18+ detected - returning false for safe check');
-      return false;
+      console.log('[LOCATION] iOS 18+ detected - using cautious permission check');
     }
     try {
       const timeoutPromise = new Promise((_, reject) => {
